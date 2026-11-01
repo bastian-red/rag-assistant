@@ -114,6 +114,92 @@ const PROOFS = [
     to: '  if (!/^\\/(library|chat)/u.test(pathname)) return null;\n',
     suite: ['unit', '@rag/web'],
   },
+  // --- chunking: spans, sentences, sizes -----------------------------------
+  {
+    name: 'chunk offsets stored in UTF-16 units, not code points',
+    file: 'packages/chunker/src/chunk.ts',
+    from: '      charStart: points(start),\n      charEnd: points(end),\n',
+    to: '      charStart: start,\n      charEnd: end,\n',
+    suite: ['unit', '@rag/chunker'],
+  },
+  {
+    name: 'astral-plane check made Unicode-aware, so it never matches',
+    file: 'packages/chunker/src/offsets.ts',
+    from: '  if (!/[\\' + 'uD800-\\' + 'uDBFF]/.test(text)) return (utf16) => utf16;',
+    to: '  if (!/[\\' + 'uD800-\\' + 'uDBFF]/u.test(text)) return (utf16) => utf16;',
+    suite: ['unit', '@rag/chunker'],
+  },
+  {
+    name: 'sentence breaks after Dr. and initials',
+    file: 'packages/chunker/src/sentences.ts',
+    from: '    if (endsInAbbreviation(segment) && from + segment.length < end) continue;\n',
+    to: '',
+    suite: ['unit', '@rag/chunker'],
+  },
+  {
+    name: 'overlap bounded by the target instead of the overlap budget',
+    file: 'packages/chunker/src/chunk.ts',
+    from: 'tokens + piece.tokens > options.overlapTokens',
+    to: 'tokens + piece.tokens > options.targetTokens',
+    suite: ['unit', '@rag/chunker'],
+  },
+  {
+    name: 'a chunk may end on the heading of the next section',
+    file: 'packages/chunker/src/chunk.ts',
+    from: "    while (keep > carried && current[keep - 1]!.kind === 'heading') keep -= 1;\n",
+    to: '',
+    suite: ['unit', '@rag/chunker'],
+  },
+  {
+    name: 'normalise composes before removing invisibles',
+    file: 'packages/chunker/src/normalise.ts',
+    from: "    .replace(SPACES, ' ')\n    .replace(INVISIBLE, '')\n    .replace(CONTROL, '')\n    .normalize('NFC')\n",
+    to: "    .normalize('NFC')\n    .replace(SPACES, ' ')\n    .replace(INVISIBLE, '')\n    .replace(CONTROL, '')\n",
+    suite: ['unit', '@rag/chunker'],
+  },
+  {
+    name: 'token estimate undercounts digits',
+    file: 'packages/chunker/src/tokens.ts',
+    from: '  digit: 1.3,',
+    to: '  digit: 0.25,',
+    suite: ['unit', '@rag/chunker'],
+  },
+  // --- citations: markers from a stream, spans in a chunk -------------------
+  {
+    name: 'a marker split across stream tokens is not held',
+    file: 'packages/citations/src/markers.ts',
+    from: "  if (i === rest.length) return final ? { kind: 'text' } : { kind: 'hold' };",
+    to: "  if (i === rest.length) return { kind: 'text' };",
+    suite: ['unit', '@rag/citations'],
+  },
+  {
+    name: 'a label naming no packed source is kept',
+    file: 'packages/citations/src/markers.ts',
+    from: '      const keep = verdict.labels.filter((n) => valid.has(n));',
+    to: '      const keep = verdict.labels;',
+    suite: ['unit', '@rag/citations'],
+  },
+  {
+    name: 'a marker opening a sentence is credited to that sentence',
+    file: 'packages/citations/src/resolve.ts',
+    from: '    if (lead !== undefined && claims.length > 0) {',
+    to: '    if (lead !== undefined && claims.length < 0) {',
+    suite: ['unit', '@rag/citations'],
+  },
+  {
+    name: 'quote offsets stored in UTF-16 units, not code points',
+    file: 'packages/citations/src/resolve.ts',
+    from: '    const quoteStart = points(best.start);',
+    to: '    const quoteStart = best.start;',
+    suite: ['unit', '@rag/citations'],
+  },
+  {
+    name: 'a quote is given the chunk first page instead of its own',
+    file: 'packages/citations/src/resolve.ts',
+    from: '      page,\n',
+    to: '      page: source.page,\n',
+    suite: ['unit', '@rag/citations'],
+  },
 ];
 
 const filters = process.argv.slice(2);

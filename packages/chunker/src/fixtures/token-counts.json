@@ -1,0 +1,295 @@
+{
+  "model": "qwen3-embedding:0.6b",
+  "measured": "2026-11-01",
+  "overhead": 1,
+  "samples": [
+    {
+      "text": "Commuter bike maintenance",
+      "tokens": 5
+    },
+    {
+      "text": "A steel touring frame with a 1x10 drivetrain, mechanical disc brakes and 35 mm tyres. Ridden\nabout 140 km a week, mostly on wet roads between October and March.",
+      "tokens": 45
+    },
+    {
+      "text": "Every week",
+      "tokens": 2
+    },
+    {
+      "text": "Wipe the chain with a rag and add one drop of wet lube to each roller, then wipe off the\nexcess after a minute. Check the tyre pressure: 60 psi in the front and 65 psi in the rear.\nSqueeze both brake levers; they should stop a good finger's width from the handlebar.",
+      "tokens": 71
+    },
+    {
+      "text": "Every month",
+      "tokens": 2
+    },
+    {
+      "text": "Measure chain wear with the checker tool. Replace the chain at 0.5 percent stretch; at\n0.75 percent the cassette wears with it and has to be replaced too. The current chain was\nfitted in June 2025.",
+      "tokens": 53
+    },
+    {
+      "text": "Check the disc brake pads. Replace them when the friction material is thinner than 1.5 mm.\nOrganic pads last about 1,500 km in winter on this route and twice that in summer.",
+      "tokens": 44
+    },
+    {
+      "text": "Every six months",
+      "tokens": 3
+    },
+    {
+      "text": "Clean and re-grease the headset and the bottom bracket threads. Replace the brake and gear\ncables if they feel rough or the gears skip after adjusting the barrel. Check the wheels are\ntrue and the spokes evenly tight.",
+      "tokens": 47
+    },
+    {
+      "text": "Punctures",
+      "tokens": 3
+    },
+    {
+      "text": "The tubes are 700x35 with Presta valves. A spare tube, two tyre levers and a mini pump live in\nthe saddle bag. Before fitting a new tube, run a finger round the inside of the tyre to find\nwhat caused the puncture, or the new tube goes flat too.",
+      "tokens": 66
+    },
+    {
+      "text": "Shop",
+      "tokens": 1
+    },
+    {
+      "text": "The local shop on Mill Lane does a full service for 75 pounds, which includes new cables and a\nwheel true. Book a week ahead in spring.",
+      "tokens": 33
+    },
+    {
+      "text": "# Boiler service record",
+      "tokens": 4
+    },
+    {
+      "text": "Combi boiler, wall-mounted in the utility cupboard beside the back door. Installed in March 2021\nby Northside Heating, who hold the installation certificate and the commissioning checklist.",
+      "tokens": 40
+    },
+    {
+      "text": "## Warranty",
+      "tokens": 2
+    },
+    {
+      "text": "The manufacturer's warranty runs for seven years from the installation date, so it ends in\nMarch 2028. It only stays valid if the boiler is serviced every twelve months by a registered\nengineer and each service is logged with the manufacturer within thirty days. A missed year\nvoids the cover for any fault found after it, not only for faults caused by the missed service.",
+      "tokens": 80
+    },
+    {
+      "text": "Parts are covered for the full seven years. Labour is covered for the first five years only;\nfrom March 2026 a warranty repair still costs the call-out fee, which was 85 pounds at the last\nquote.",
+      "tokens": 48
+    },
+    {
+      "text": "## Annual service",
+      "tokens": 3
+    },
+    {
+      "text": "The service is booked for the first two weeks of October, before the heating goes on for the\nwinter. The engineer checks the flue, the gas pressure, the condensate trap and the expansion\nvessel, and cleans the heat exchanger. Each visit takes about an hour.",
+      "tokens": 59
+    },
+    {
+      "text": "| Date            | Engineer           | Notes                                                   |\n| --------------- | ------------------ | ------------------------------------------------------- |\n| 12 October 2022 | P. Adeyemi         | Condensate trap cleaned. System pressure topped to 1.2 bar. |\n| 9 October 2023  | P. Adeyemi         | Expansion vessel recharged. Flue seal replaced.         |\n| 14 October 2024 | R. Lindqvist       | No faults. Recommended a magnetic filter.               |\n| 6 October 2025  | R. Lindqvist       | Magnetic filter fitted and cleaned. Pressure 1.3 bar.   |",
+      "tokens": 146
+    },
+    {
+      "text": "## Pressure",
+      "tokens": 2
+    },
+    {
+      "text": "The gauge on the front panel should read between 1 and 1.5 bar when the system is cold. Below\n1 bar the boiler locks out with fault code F22. To top it up, open both filling-loop valves\nunder the boiler slowly until the needle reaches 1.3 bar, then close them fully. If the\npressure drops again within a week there is a leak somewhere in the system and the engineer\nshould be called rather than topping up again.",
+      "tokens": 98
+    },
+    {
+      "text": "## Radiators",
+      "tokens": 3
+    },
+    {
+      "text": "Bleed the radiators at the start of each winter, upstairs first, with the heating off and cold.\nThe bathroom towel rail has its own valve and takes longest to clear. After bleeding, check the\npressure gauge again: bleeding lowers it.",
+      "tokens": 51
+    },
+    {
+      "text": "# Flat lease: the parts that matter",
+      "tokens": 8
+    },
+    {
+      "text": "A plain summary of the tenancy agreement for flat 4, 18 Calder Road, written for my own\nreference. The signed agreement is the one that counts if this summary and it ever disagree.",
+      "tokens": 42
+    },
+    {
+      "text": "## Term and rent",
+      "tokens": 4
+    },
+    {
+      "text": "The tenancy is an assured shorthold for twenty-four months, from 1 September 2025 to\n31 August 2027. Rent is 1,150 pounds a month, due on the first of each month by standing order.\nThe landlord may raise the rent once, on the first anniversary, by no more than the change in\nthe consumer price index over the previous year, with at least two months' written notice.",
+      "tokens": 96
+    },
+    {
+      "text": "## Deposit",
+      "tokens": 2
+    },
+    {
+      "text": "The deposit is 1,325 pounds, held in a government-approved deposit protection scheme. The\nscheme's certificate arrived by email on 9 September 2025. At the end of the tenancy the\nlandlord has ten days to propose any deductions, and anything disputed goes to the scheme's\nfree adjudication instead of being kept.",
+      "tokens": 74
+    },
+    {
+      "text": "## Break clause",
+      "tokens": 3
+    },
+    {
+      "text": "Either side may end the tenancy early from month twelve onwards with two months' written\nnotice. The earliest end date under the break clause is therefore 31 August 2026 if notice is\ngiven by 30 June 2026. Notice has to be in writing; an email to the managing agent counts.",
+      "tokens": 70
+    },
+    {
+      "text": "## Repairs",
+      "tokens": 3
+    },
+    {
+      "text": "The landlord is responsible for the structure, the exterior, the boiler, the water heating and\nthe wiring. The tenant is responsible for small things: light bulbs, smoke alarm batteries,\nblocked sinks caused by use. Anything urgent, such as a leak or no heating, is reported to the\nmanaging agent's emergency line, which answers at any hour. Non-urgent repairs are reported by\nemail and should be acknowledged within five working days.",
+      "tokens": 90
+    },
+    {
+      "text": "## Pets and subletting",
+      "tokens": 6
+    },
+    {
+      "text": "One cat is allowed by name in the agreement. Subletting any part of the flat is not allowed,\nand neither is running a business that brings visitors to the building.",
+      "tokens": 35
+    },
+    {
+      "text": "## Leaving",
+      "tokens": 2
+    },
+    {
+      "text": "At the end of the tenancy the flat has to be returned in the condition recorded in the\ninventory of 1 September 2025, allowing for fair wear and tear. The carpets are to be\nprofessionally cleaned only if they were cleaned before move-in, which the inventory says they\nwere.",
+      "tokens": 64
+    },
+    {
+      "text": "# Cold room and freezers",
+      "tokens": 6
+    },
+    {
+      "text": "How the cold storage on level 2 is run, for anyone covering the weekly checks.",
+      "tokens": 18
+    },
+    {
+      "text": "## The units",
+      "tokens": 3
+    },
+    {
+      "text": "| Unit | Kind               | Set point | Alarm above | Holds                                  |\n| ---- | ------------------ | --------- | ----------- | -------------------------------------- |\n| F1   | Upright, -80 °C    | -80 °C    | -70 °C      | Cell lines, plasmid stocks             |\n| F2   | Upright, -80 °C    | -80 °C    | -70 °C      | Patient-derived samples (restricted)   |\n| F3   | Chest, -20 °C      | -20 °C    | -15 °C      | Enzymes, antibodies in glycerol        |\n| CR   | Walk-in cold room  | 4 °C      | 8 °C        | Buffers, media, bacterial plates       |",
+      "tokens": 175
+    },
+    {
+      "text": "## Alarms",
+      "tokens": 3
+    },
+    {
+      "text": "Each unit reports its temperature every minute to the building monitoring system. An alarm\nsends a text message to the on-call technician and, after fifteen minutes unanswered, to the lab\nmanager. The alarm panel beside the cold room door is silenced and reset with the code\nheliotrope-4417, which is changed every quarter and must never be written on the panel.",
+      "tokens": 79
+    },
+    {
+      "text": "If a -80 °C freezer alarms, first check the door is fully shut and the seal is free of ice.\nIf the temperature is still rising, move the racks into the backup unit F1 or F2, whichever is\nemptier, and log the transfer. A -80 °C freezer that has failed warms to -50 °C in roughly\nfour hours with the door closed.",
+      "tokens": 84
+    },
+    {
+      "text": "## Weekly checks",
+      "tokens": 3
+    },
+    {
+      "text": "On Monday mornings, record each unit's display temperature and the monitoring system's reading\nside by side; a difference of more than 3 °C means the probe needs recalibrating. Scrape the ice\nfrom the door seals of F1 to F3. Check the cold room's floor for condensation under the\nshelves.",
+      "tokens": 69
+    },
+    {
+      "text": "## Defrosting",
+      "tokens": 4
+    },
+    {
+      "text": "The -20 °C chest freezer is defrosted every six months, in January and July. Its contents go to\nthe cold room shelf marked for it for no longer than two hours. The -80 °C units are defrosted\nonly by the service contractor.",
+      "tokens": 58
+    },
+    {
+      "text": "# Lab safety induction",
+      "tokens": 4
+    },
+    {
+      "text": "What every new member of the lab reads and signs before working at a bench.",
+      "tokens": 16
+    },
+    {
+      "text": "## Before the first day at the bench",
+      "tokens": 8
+    },
+    {
+      "text": "Complete the online biosafety course and the chemical handling course; both certificates go to\nthe lab manager. Collect a lab coat from the store room; coats never leave the lab, not even\nfor lunch. Safety glasses are worn whenever anyone in the room is working with liquids.",
+      "tokens": 56
+    },
+    {
+      "text": "## Biological safety cabinets",
+      "tokens": 4
+    },
+    {
+      "text": "Work with cell lines happens only inside a class II cabinet. Switch the cabinet on and let the\nairflow run for ten minutes before starting. Wipe the work surface with 70 percent ethanol\nbefore and after. Never block the front grille: the airflow through it is what keeps the\noperator safe, and a full grille sets off the cabinet's alarm.",
+      "tokens": 74
+    },
+    {
+      "text": "## Chemicals",
+      "tokens": 3
+    },
+    {
+      "text": "Every chemical has a safety data sheet in the shared folder, and the risk assessment for a\nprocedure has to be read before running it for the first time. Flammable solvents live in the\nyellow cabinet and never more than 500 ml at a bench. Acids and bases are stored apart.",
+      "tokens": 63
+    },
+    {
+      "text": "## Waste",
+      "tokens": 2
+    },
+    {
+      "text": "Sharps go into the yellow sharps bins, which are closed and collected when three-quarters full.\nBiological waste is autoclaved before disposal; the autoclave log is signed by whoever runs\nit. Chemical waste goes into the labelled containers in the fume hood, one container per waste\nclass, never mixed.",
+      "tokens": 66
+    },
+    {
+      "text": "## Spills and accidents",
+      "tokens": 5
+    },
+    {
+      "text": "Small spills of biological material are covered with paper towel, soaked in disinfectant and\nleft for twenty minutes before wiping. For anything larger, or any chemical spill that gives\noff fumes, leave the room, close the door and call the lab manager. Every accident, however\nsmall, is written in the incident book the same day.",
+      "tokens": 70
+    },
+    {
+      "text": "## Working alone",
+      "tokens": 3
+    },
+    {
+      "text": "No one works alone in the lab outside 8:00 to 19:00 on weekdays. Weekend work needs the lab\nmanager's approval and a second person in the building who knows you are there.",
+      "tokens": 45
+    },
+    {
+      "text": "const total = items.reduce((sum, item) => sum + item.price * item.qty, 0); // TODO: tax",
+      "tokens": 26
+    },
+    {
+      "text": "Invoice 2024-03-17 #A-99812: 1,234.56 EUR; IBAN DE89 3704 0044 0532 0130 00.",
+      "tokens": 61
+    },
+    {
+      "text": "La caldera se revisa cada otoño; la garantía cubre siete años desde la instalación.",
+      "tokens": 24
+    },
+    {
+      "text": "See https://example.com/docs/v2/install?lang=en#step-3 for the full guide.",
+      "tokens": 21
+    },
+    {
+      "text": "| 12 October 2022 | P. Adeyemi | 1.2 bar | 3,400 rpm | 98.6% |",
+      "tokens": 38
+    },
+    {
+      "text": "Die Wartung des Heizkessels erfolgt jährlich; Störungscode F22 bedeutet zu niedriger Druck.",
+      "tokens": 31
+    },
+    {
+      "text": "ERROR 2024-11-01T21:59:16.839Z cmvydhch30030nxmmo8by1vqx 3d4c0a7d3d535c2213f1c8c2e7c871d3",
+      "tokens": 75
+    },
+    {
+      "text": "Ein „Zitat“ — mit Gedankenstrich… und Emoji 🙂 und °C, µg, ±0.5.",
+      "tokens": 27
+    }
+  ]
+}

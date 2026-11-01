@@ -178,6 +178,46 @@ importers:
         specifier: ^5.6.3
         version: 5.9.3
 
+  packages/chunker:
+    devDependencies:
+      '@rag/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: ^20.17.6
+        version: 20.19.43
+      fast-check:
+        specifier: ^3.23.2
+        version: 3.23.2
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@20.19.43)(terser@5.51.2)
+
+  packages/citations:
+    dependencies:
+      '@rag/chunker':
+        specifier: workspace:*
+        version: link:../chunker
+    devDependencies:
+      '@rag/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: ^20.17.6
+        version: 20.19.43
+      fast-check:
+        specifier: ^3.23.2
+        version: 3.23.2
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@20.19.43)(terser@5.51.2)
+
   packages/config: {}
 
   packages/db:
