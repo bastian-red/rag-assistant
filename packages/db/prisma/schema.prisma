@@ -126,6 +126,9 @@ model Chunk {
   /// 1-based page range for a PDF; both null for markdown and text.
   pageStart      Int?                         @map("page_start")
   pageEnd        Int?                         @map("page_end")
+  /// Where each later page begins inside the chunk: [{page, at}], `at` in code
+  /// points from charStart; [] on one page. Held by chunks_page_starts_check.
+  pageStarts     Json                         @default("[]") @map("page_starts")
   /// [charStart, charEnd) in the document's normalised text.
   charStart      Int                          @map("char_start")
   charEnd        Int                          @map("char_end")

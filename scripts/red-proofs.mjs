@@ -24,7 +24,10 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** name, file, exact text, its broken replacement, and the suite that must go red. */
+/**
+ * name, file, exact text, its broken replacement, and the suite that must go
+ * red; `freshDatabase` for a proof that edits a migration (see databaseUrl).
+ */
 const PROOFS = [
   // --- the API's guards and budgets ----------------------------------------
   {
@@ -200,6 +203,14 @@ const PROOFS = [
     to: '      page: source.page,\n',
     suite: ['unit', '@rag/citations'],
   },
+  {
+    name: 'page starts may stop short of the chunk last page',
+    file: 'packages/db/prisma/migrations/20261101230000_chunk_page_starts/migration.sql',
+    from: '         OR (s.last AND s.page <> page_end)\n',
+    to: '',
+    suite: ['integration', 'library'],
+    freshDatabase: 'rag_proof',
+  },
 ];
 
 const filters = process.argv.slice(2);
@@ -211,9 +222,48 @@ if (chosen.length === 0) {
   process.exit(2);
 }
 
-function run(suite) {
+/**
+ * A migration proof needs a database that has never seen the migration:
+ * `migrate deploy` skips an applied migration whose file changed, and
+ * db-drift.mjs refuses it, so against rag_it the proof would go red for that
+ * reason and prove nothing about the SQL. Such a proof names a throwaway
+ * database, dropped before and after (only names starting rag_proof).
+ */
+function databaseUrl(name) {
+  const env = existsSync(join(ROOT, '.env')) ? readFileSync(join(ROOT, '.env'), 'utf8') : '';
+  const base =
+    process.env.DATABASE_URL ??
+    /^DATABASE_URL=(.+)$/mu.exec(env)?.[1]?.trim() ??
+    'postgresql://rag:rag@localhost:5445/rag?schema=public';
+  const url = new URL(base);
+  url.pathname = `/${name}`;
+  return url.toString();
+}
+
+function dropDatabase(name) {
+  if (!/^rag_proof[a-z_]*$/u.test(name)) throw new Error(`refusing to drop ${name}`);
+  const script = `
+    const { PrismaClient } = require('./generated/client');
+    const url = new URL(process.env.TARGET);
+    url.pathname = '/postgres';
+    const admin = new PrismaClient({ datasources: { db: { url: url.toString() } } });
+    admin.$executeRawUnsafe('DROP DATABASE IF EXISTS "${name}" WITH (FORCE)').finally(() => admin.$disconnect());`;
+  const result = spawnSync('pnpm', ['--filter', '@rag/db', 'exec', 'node', '-e', script], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    env: { ...process.env, TARGET: databaseUrl(name) },
+  });
+  if (result.status !== 0) throw new Error(`could not drop ${name}: ${result.stderr}`);
+}
+
+function run(suite, proof) {
   const [lane, arg] = suite;
-  const options = { cwd: ROOT, encoding: 'utf8' };
+  const env = { ...process.env };
+  if (proof.freshDatabase !== undefined) {
+    dropDatabase(proof.freshDatabase);
+    env.INTEGRATION_DATABASE_URL = databaseUrl(proof.freshDatabase);
+  }
+  const options = { cwd: ROOT, encoding: 'utf8', env };
   const result =
     lane === 'unit'
       ? spawnSync('pnpm', ['--filter', arg ?? '@rag/api', 'exec', 'vitest', 'run'], options)
@@ -222,7 +272,7 @@ function run(suite) {
     status: result.status,
     tail: `${result.stdout}${result.stderr}`
       .split('\n')
-      .filter((l) => /×|FAIL|error TS/u.test(l))
+      .filter((l) => /×|\bFAIL\b|error TS|db-drift:/u.test(l))
       .slice(0, 3),
   };
 }
@@ -262,7 +312,7 @@ for (const proof of chosen) {
       edits.reduce((text, edit) => text.replace(edit.from, edit.to), original),
     );
     process.stdout.write(`red-proofs: ${proof.name} ... `);
-    const { status, tail } = run(proof.suite);
+    const { status, tail } = run(proof.suite, proof);
     const verdict = status === 0 ? 'STAYED GREEN' : 'red';
     console.log(verdict);
     for (const line of tail) console.log(`    ${line.trim()}`);
@@ -270,6 +320,7 @@ for (const proof of chosen) {
   } finally {
     restore();
     restore = null;
+    if (proof.freshDatabase !== undefined) dropDatabase(proof.freshDatabase);
   }
 }
 

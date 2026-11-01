@@ -78,6 +78,7 @@ export const CHUNK_ORD = 'chunks_ord_check';
 export const CHUNK_TEXT = 'chunks_text_check';
 export const CHUNK_SPAN = 'chunks_span_check';
 export const CHUNK_PAGES = 'chunks_pages_check';
+export const CHUNK_PAGE_STARTS = 'chunks_page_starts_check';
 export const CHUNK_TOKENS = 'chunks_tokens_check';
 export const CHUNK_HEADING_PATH = 'chunks_heading_path_check';
 export const CHUNK_EMBEDDING_MODEL = 'chunks_embedding_model_check';

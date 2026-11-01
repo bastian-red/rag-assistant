@@ -9,7 +9,9 @@ import { EMBEDDING_DIMENSIONS } from '../src/constraints';
 import { violatedConstraint, violatedUniqueIndex } from '../src/errors';
 
 const url = process.env.DATABASE_URL;
-if (url === undefined || url === '' || !url.includes('rag_it')) {
+// rag_it, or a throwaway rag_proof database a migration red proof made fresh.
+const database = url === undefined || url === '' ? '' : new URL(url).pathname.slice(1);
+if (!/^(rag_it|rag_proof[a-z_]*)$/u.test(database)) {
   throw new Error('DATABASE_URL must point at rag_it. Run this through ./scripts/integration.sh.');
 }
 
@@ -111,6 +113,8 @@ export interface ChunkRow {
   charEnd?: number;
   pageStart?: number | null;
   pageEnd?: number | null;
+  /** Raw JSON, so a test can store a malformed value. */
+  pageStarts?: unknown;
   tokens?: number;
   headingPath?: string[] | null;
   embedding?: number[];
@@ -128,10 +132,11 @@ export async function insertChunk(row: ChunkRow): Promise<string> {
   const embedding = literal(row.embedding ?? unit(1));
   const headingPath = row.headingPath === undefined ? [] : row.headingPath;
   await db.$executeRaw`
-    INSERT INTO chunks (id, owner_id, document_id, ord, text, page_start, page_end,
+    INSERT INTO chunks (id, owner_id, document_id, ord, text, page_start, page_end, page_starts,
                         char_start, char_end, heading_path, tokens, embedding, embedding_model)
     VALUES (${id}, ${row.ownerId}, ${row.documentId}, ${row.ord ?? 0}, ${text},
             ${row.pageStart ?? null}::int, ${row.pageEnd ?? null}::int,
+            ${JSON.stringify(row.pageStarts ?? [])}::jsonb,
             ${charStart}, ${row.charEnd ?? charStart + text.length}, ${headingPath}::text[],
             ${row.tokens ?? 8}, ${embedding}::halfvec, ${row.embeddingModel ?? 'qwen3-embedding:0.6b'})`;
   return id;

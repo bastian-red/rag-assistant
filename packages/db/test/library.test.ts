@@ -17,6 +17,7 @@ import {
   CHUNK_ORD,
   CHUNK_ORD_UNIQUE,
   CHUNK_PAGES,
+  CHUNK_PAGE_STARTS,
   CHUNK_SPAN,
   CHUNK_TEXT,
   CHUNK_TOKENS,
@@ -52,6 +53,7 @@ import {
   db,
   documentData,
   insertChunk,
+  type ChunkRow,
   names,
   newAnswer,
   newCollection,
@@ -347,6 +349,86 @@ describe('CHECKs: each malformed row is refused by name', () => {
       insertChunk({ ownerId: alma, documentId: almaDoc, ord, ...overrides }),
     );
     expect(names(error, constraint)).toBe(true);
+  });
+
+  // A two-page chunk unless a case says otherwise; pageStarts is raw JSON.
+  it.each<[string, Partial<ChunkRow>]>([
+    ['page starts that are not a list', { pageStarts: { page: 2, at: 9 } }],
+    [
+      'page starts on a chunk with no pages',
+      { pageStart: null, pageEnd: null, pageStarts: [{ page: 2, at: 9 }] },
+    ],
+    ['a page starting at the chunk start', { pageStarts: [{ page: 2, at: 0 }] }],
+    ['a page starting at or past the chunk end', { pageStarts: [{ page: 2, at: 36 }] }],
+    ['a page start on the first page', { pageStarts: [{ page: 1, at: 9 }] }],
+    [
+      'the last page start short of the last page',
+      { pageEnd: 3, pageStarts: [{ page: 2, at: 9 }] },
+    ],
+    [
+      'pages out of order',
+      {
+        pageEnd: 3,
+        pageStarts: [
+          { page: 3, at: 9 },
+          { page: 2, at: 20 },
+        ],
+      },
+    ],
+    [
+      'offsets out of order',
+      {
+        pageEnd: 3,
+        pageStarts: [
+          { page: 2, at: 20 },
+          { page: 3, at: 9 },
+        ],
+      },
+    ],
+    ['an entry with an extra key', { pageStarts: [{ page: 2, at: 9, note: 'x' }] }],
+    ['a fractional offset', { pageStarts: [{ page: 2, at: 9.5 }] }],
+    ['a page written as text', { pageStarts: [{ page: '2', at: 9 }] }],
+    ['an entry that is not an object', { pageStarts: [9] }],
+  ])('chunk: %s', async (_, overrides) => {
+    ord += 1;
+    const error = await refused(
+      insertChunk({
+        ownerId: alma,
+        documentId: almaDoc,
+        ord,
+        pageStart: 1,
+        pageEnd: 2,
+        ...overrides,
+      }),
+    );
+    expect(names(error, CHUNK_PAGE_STARTS)).toBe(true);
+  });
+
+  it('chunk: page starts across pages, and past an empty page, are fine', async () => {
+    // The default text is 36 code points long.
+    await expect(
+      insertChunk({
+        ownerId: alma,
+        documentId: almaDoc,
+        ord: 990,
+        pageStart: 1,
+        pageEnd: 3,
+        pageStarts: [
+          { page: 2, at: 10 },
+          { page: 3, at: 20 },
+        ],
+      }),
+    ).resolves.toBeDefined();
+    await expect(
+      insertChunk({
+        ownerId: alma,
+        documentId: almaDoc,
+        ord: 991,
+        pageStart: 1,
+        pageEnd: 3,
+        pageStarts: [{ page: 3, at: 12 }],
+      }),
+    ).resolves.toBeDefined();
   });
 
   it('chunk: an embedding of the wrong width is refused by the column type', async () => {

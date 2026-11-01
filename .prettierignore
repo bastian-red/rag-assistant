@@ -3,3 +3,6 @@
 apps/web/next-env.d.ts
 packages/db/generated/
 e2e/demo-shots/
+# The seed corpus is fixture data: the seed keys each document by its sha256,
+# so reformatting a file makes the seed add a second copy of it.
+packages/db/prisma/corpus/
