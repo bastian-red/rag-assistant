@@ -1,0 +1,10 @@
+{
+  "extends": "@rag/config/tsconfig.node.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext"
+  },
+  "include": ["prisma/seed.mts"]
+}

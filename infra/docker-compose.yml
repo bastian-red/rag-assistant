@@ -1,0 +1,158 @@
+# The datastores are always on; the application services live behind the `app`
+# profile, and the model server behind `ollama`, so `docker compose up -d` gives
+# you what `pnpm dev` needs and nothing else.
+#
+#   docker compose -f infra/docker-compose.yml up -d                            # postgres + redis
+#   docker compose -f infra/docker-compose.yml --profile app up -d --build      # + api, web
+#   docker compose -f infra/docker-compose.yml --profile app --profile ollama up -d --build
+#
+# The model server. By default the containers use an Ollama running on the
+# HOST (scripts/ollama-setup.sh installs one user-locally), reached through
+# host.docker.internal: models are gigabytes, and a host install keeps them out
+# of the Docker disk and shared with `pnpm dev`. On a machine with no host
+# Ollama, add `--profile ollama` and point the containers at it:
+#
+#   COMPOSE_OLLAMA_URL=http://ollama:11434 docker compose -f infra/docker-compose.yml \
+#     --profile app --profile ollama up -d --build
+#   docker exec rag-ollama ollama pull qwen3:4b
+#   docker exec rag-ollama ollama pull qwen3-embedding:0.6b
+
+# Explicit, and not optional. Without it Compose derives the project name from the
+# containing directory, which is `infra` in every project in this portfolio, and
+# bringing up a second stack evicts the first one's containers AND its volumes.
+name: rag
+
+services:
+  postgres:
+    # pgvector on Postgres 17. The init migration runs CREATE EXTENSION vector,
+    # so the wrong image fails at the first migrate, by name.
+    image: pgvector/pgvector:0.8.7-pg17
+    container_name: rag-postgres
+    # Back after a Docker daemon restart or a reboot.
+    restart: unless-stopped
+    # A smaller WAL ceiling than the 1 GB default: embedding a corpus writes
+    # every chunk's vector and its HNSW index pages, and a full Docker disk
+    # crashes the server mid-run (a sibling project learned this). 128 MB only
+    # means more frequent checkpoints.
+    command: ['postgres', '-c', 'max_wal_size=128MB', '-c', 'min_wal_size=32MB']
+    environment:
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: rag
+      POSTGRES_DB: rag
+    # 5432 is the dev host's own PostgreSQL and 5433-5444 belong to the sibling
+    # portfolio stacks, so this project takes 5445.
+    ports:
+      - '5445:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U rag -d rag']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: rag-redis
+    restart: unless-stopped
+    # Rate-limit counters today; the ingest queue (BullMQ) from build step 5.
+    # Append-only persistence keeps a queued job and a limit across a restart.
+    command: ['redis-server', '--appendonly', 'yes', '--appendfsync', 'everysec']
+    ports:
+      - '6391:6379'
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # --- The model server, when the host has none: --profile ollama ----------
+  ollama:
+    image: ollama/ollama:0.40.12
+    container_name: rag-ollama
+    profiles: ['ollama']
+    restart: unless-stopped
+    ports:
+      - '11434:11434'
+    volumes:
+      - ollama:/root/.ollama
+    healthcheck:
+      test: ['CMD', 'ollama', 'list']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # --- The whole stack: --profile app --------------------------------------
+
+  # Migrations and the seed run from the api image (its @rag/db carries the
+  # migrations and the seed; prisma and tsx are api dependencies for this), so
+  # there is no separate migrate image to build onto a small Docker disk.
+  migrate:
+    image: rag-api
+    pull_policy: never
+    container_name: rag-migrate
+    profiles: ['app']
+    env_file:
+      - ../.env
+    environment: &datastores
+      DATABASE_URL: postgresql://rag:rag@postgres:5432/rag?schema=public
+      REDIS_URL: redis://redis:6379
+      OLLAMA_URL: ${COMPOSE_OLLAMA_URL:-http://host.docker.internal:11434}
+    command: ['npm', 'run', '--silent', 'db:setup']
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+    image: rag-api
+    container_name: rag-api
+    profiles: ['app']
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      <<: *datastores
+      PORT: ''
+      API_PORT: '4600'
+    # host.docker.internal resolves to the host on Linux too (Docker 20.10+).
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    ports:
+      - '4600:4600'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.web
+    image: rag-web
+    container_name: rag-web
+    profiles: ['app']
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      PORT: '3600'
+      API_BASE_URL: http://api:4600
+      AUTH_URL: ${AUTH_URL:-http://localhost:3600}
+    ports:
+      - '3600:3600'
+    # Started once the api answers its healthcheck, which includes both models:
+    # a web app over an api that cannot answer a question is not "up".
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:
+  ollama:

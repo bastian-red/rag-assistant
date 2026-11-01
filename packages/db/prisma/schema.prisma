@@ -1,0 +1,35 @@
+// rag-assistant schema.
+//
+// Build step 1 holds only the accounts. Collections, documents, chunks (with
+// their pgvector column and HNSW index), conversations, messages, citations
+// and retrieval traces arrive in build step 2 (docs/PLAN.md), with the
+// hand-written SQL Prisma cannot express listed in `src/constraints.ts`.
+//
+// The init migration already enables the `vector` extension, so a stack
+// started on the wrong Postgres image fails at `migrate deploy` with a clear
+// error, not at the first embedding write weeks later.
+//
+// `prisma migrate dev` is `--create-only` in package.json, so a generated
+// migration is reviewed before it is applied.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// A person with a private library. There are no roles: the only
+/// authorisation question in this system is "is this row yours?".
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique(map: "users_email_key")
+  name         String
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("users")
+}

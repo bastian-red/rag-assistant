@@ -1,0 +1,66 @@
+# syntax=docker/dockerfile:1.7
+#
+# @rag/api, multi-stage. Build from the REPO ROOT:
+#   docker build -f infra/Dockerfile.api -t rag-api .
+#
+# The same image serves every replica.
+
+FROM node:20-bookworm-slim AS base
+# openssl: Prisma's query engine links against it, and bookworm-slim ships without.
+RUN apt-get update -qq \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+WORKDIR /repo
+
+# --- fetch: a layer keyed on the lockfile alone ------------------------------
+FROM base AS fetch
+# package.json for its pnpm.supportedArchitectures: glibc binaries only. Without
+# it the store also carries the musl builds of next's compiler and sharp
+# (about 300 MB) that a bookworm image never loads.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# --ignore-scripts: simple-git-hooks' postinstall walks up for a package.json this
+# stage has deliberately not copied, and crashes the fetch.
+RUN pnpm fetch --ignore-scripts
+
+# --- build ---------------------------------------------------------------------
+FROM fetch AS build
+COPY . .
+RUN pnpm install --frozen-lockfile --offline --ignore-scripts
+# The Prisma client is generated INTO packages/db/generated (schema.prisma says
+# why), so `pnpm deploy` below carries it along with the package.
+RUN --mount=type=cache,id=rag-deploy-cache,sharing=locked,target=/root/.cache \
+  pnpm --filter @rag/db run generate
+RUN pnpm exec turbo run build --filter=@rag/api...
+
+FROM build AS prod-deps
+# A default deploy wrote 3.5x the deployment into its layer: ~195 MB of registry
+# metadata and engine downloads into /root/.cache, plus every store file it
+# hardlinked, copied up out of the lower layer. A 12 GB Docker disk ran out.
+# So /root/.cache is a cache mount (shared by every deploy, in no layer) and
+# packages are copied from the store, which leaves the store untouched.
+RUN --mount=type=cache,id=rag-deploy-cache,sharing=locked,target=/root/.cache \
+  pnpm --filter @rag/api deploy --prod --config.package-import-method=copy /prod/api
+RUN test -f /prod/api/dist/main.js || \
+  (echo "prod-deps: /prod/api/dist/main.js is missing after pnpm deploy." >&2 && exit 1)
+RUN test -d /prod/api/node_modules/@rag/db/generated/client || \
+  (echo "prod-deps: the generated Prisma client did not survive pnpm deploy." >&2 && exit 1)
+
+# --- runtime ---------------------------------------------------------------
+FROM node:20-bookworm-slim AS runtime
+RUN apt-get update -qq \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/* \
+  && groupadd --gid 1001 app \
+  && useradd --uid 1001 --gid app --shell /usr/sbin/nologin --no-create-home app
+WORKDIR /app
+COPY --from=prod-deps --chown=app:app /prod/api ./
+USER app
+ENV NODE_ENV=production
+EXPOSE 4600
+# The healthcheck hits the same process the routes are on, and /health checks the
+# dependencies for real, so a green container has a live Postgres, Redis and a
+# model server with both models pulled behind it.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "require('http').get('http://127.0.0.1:'+(process.env.PORT||process.env.API_PORT||4600)+'/health',(r)=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
+CMD ["node", "dist/main.js"]
