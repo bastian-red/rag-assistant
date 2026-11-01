@@ -119,6 +119,22 @@ code,
   color: var(--muted);
 }
 
+/* The library's collections. Placeholder styling until the design step. */
+.collections {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.collections h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1.125rem;
+}
+
+.collections p {
+  margin: 0;
+}
+
 .field {
   display: grid;
   gap: 0.25rem;

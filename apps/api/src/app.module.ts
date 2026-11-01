@@ -19,6 +19,8 @@ import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis'
 import { API_CONFIG, type ApiConfig } from './config/config';
 import { AuthController } from './auth/auth.controller';
 import { AuthService } from './auth/auth.service';
+import { CollectionsController } from './collections/collections.controller';
+import { CollectionsService } from './collections/collections.service';
 import { DomainErrorFilter } from './common/domain-error.filter';
 import { SessionGuard } from './common/session.guard';
 import { throttlers } from './common/throttle';
@@ -39,9 +41,10 @@ import { StatusController } from './status/status.controller';
       }),
     }),
   ],
-  controllers: [AuthController, HealthController, StatusController],
+  controllers: [AuthController, CollectionsController, HealthController, StatusController],
   providers: [
     AuthService,
+    CollectionsService,
     HealthService,
     // Registration order is execution order.
     { provide: APP_GUARD, useClass: SessionGuard },

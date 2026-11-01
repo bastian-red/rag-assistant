@@ -88,7 +88,13 @@ describe('the session guard is default-closed', () => {
   it('serves exactly the routes this table expects, so a new route is a reviewed decision', () => {
     // Read from the running router. A route added without a row here fails
     // this test, which is the moment to decide whether it is public.
-    expect(routes(h)).toEqual(['GET /auth/me', 'GET /health', 'GET /status', 'POST /auth/sign-in']);
+    expect(routes(h)).toEqual([
+      'GET /auth/me',
+      'GET /collections',
+      'GET /health',
+      'GET /status',
+      'POST /auth/sign-in',
+    ]);
   });
 });
 

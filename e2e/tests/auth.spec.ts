@@ -9,6 +9,22 @@ for (const who of Object.keys(PEOPLE) as Person[]) {
   });
 }
 
+test('each person sees their own collections, and none of the other person’s', async ({ page }) => {
+  // The seed gives Alma "Home" (2 documents) and "Bike" (1), and Bruno "Lab"
+  // (2). All five are queued until the ingest worker reads them (step 5).
+  await signIn(page, 'alma');
+  const shelves = page.getByTestId('collection');
+  await expect(shelves.getByRole('heading')).toHaveText(['Bike', 'Home']);
+  await expect(shelves.filter({ hasText: 'Home' })).toContainText(
+    '2 documents: 2 still being read',
+  );
+  await expect(page.getByTestId('collections')).not.toContainText('Lab');
+
+  await signOut(page);
+  await signIn(page, 'bruno');
+  await expect(shelves.getByRole('heading')).toHaveText(['Lab']);
+});
+
 test('a wrong password is one answer, whatever was wrong', async ({ page }) => {
   for (const email of [PEOPLE.alma.email, 'nobody@rag.test']) {
     await page.goto('/sign-in');

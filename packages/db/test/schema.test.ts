@@ -46,10 +46,14 @@ describe('users', () => {
     expect(names(error, USER_EMAIL_LOWERCASE)).toBe(true);
   });
 
-  it('refuses a blank name', async () => {
+  it.each([
+    ['spaces', '   '],
+    // btrim() strips only spaces; the step-1 check let this one through.
+    ['a tab and a newline', '\t\n'],
+  ])('refuses a blank name: %s', async (_, name) => {
     const error = await refused(
       db.user.create({
-        data: { email: `blank-${randomUUID()}@rag.test`, name: '   ', passwordHash: 'x' },
+        data: { email: `blank-${randomUUID()}@rag.test`, name, passwordHash: 'x' },
       }),
     );
     expect(names(error, USER_NAME_LENGTH)).toBe(true);

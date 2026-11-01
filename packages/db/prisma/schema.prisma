@@ -1,13 +1,24 @@
 // rag-assistant schema.
 //
-// Build step 1 holds only the accounts. Collections, documents, chunks (with
-// their pgvector column and HNSW index), conversations, messages, citations
-// and retrieval traces arrive in build step 2 (docs/PLAN.md), with the
-// hand-written SQL Prisma cannot express listed in `src/constraints.ts`.
+// One rule shapes every table below: a row belongs to exactly one person, and
+// the database, not the application, makes it impossible for a row to point at
+// another person's row. Every owned table carries `owner_id`, and every link
+// between owned tables is a COMPOSITE foreign key over (id, owner_id), so a
+// document cannot sit in someone else's collection, a chunk cannot belong to
+// someone else's document and a citation cannot name someone else's chunk. The
+// owner is denormalised onto chunks on purpose: the retrieval query filters by
+// it inside the nearest-neighbour scan itself (docs/PLAN.md, "Security").
 //
-// The init migration already enables the `vector` extension, so a stack
-// started on the wrong Postgres image fails at `migrate deploy` with a clear
-// error, not at the first embedding write weeks later.
+// What Prisma can declare is declared here. What it cannot is hand-written in
+// the migrations and named in `src/constraints.ts`:
+//   - the halfvec HNSW index and the tsvector GIN index on chunks,
+//   - two composite foreign keys whose ON DELETE must null ONE column
+//     (`SET NULL (col)`, Postgres 15+), which Prisma would apply to both,
+//   - every CHECK, and the partial unique index that allows one streaming
+//     answer per conversation.
+//
+// The init migration enables the `vector` extension, so a stack started on the
+// wrong Postgres image fails at `migrate deploy`, by name.
 //
 // `prisma migrate dev` is `--create-only` in package.json, so a generated
 // migration is reviewed before it is applied.
@@ -31,5 +42,225 @@ model User {
   passwordHash String   @map("password_hash")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
+  collections   Collection[]
+  documents     Document[]
+  chunks        Chunk[]
+  conversations Conversation[]
+  messages      Message[]
+  citations     Citation[]
+  traces        RetrievalTrace[]
+
   @@map("users")
+}
+
+/// A named shelf in one person's library. Questions are asked over one
+/// collection or over the whole library.
+model Collection {
+  id        String   @id @default(cuid())
+  ownerId   String   @map("owner_id")
+  name      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  owner         User           @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "collections_owner_id_fkey")
+  documents     Document[]
+  conversations Conversation[]
+
+  @@unique([ownerId, name], map: "collections_owner_id_name_key")
+  /// The target of every composite foreign key into this table.
+  @@unique([id, ownerId], map: "collections_id_owner_id_key")
+  @@map("collections")
+}
+
+/// Where a document is in ingestion. FAILED always carries a reason.
+enum DocumentStatus {
+  QUEUED
+  PARSING
+  EMBEDDING
+  READY
+  FAILED
+
+  @@map("document_status")
+}
+
+/// One uploaded file. The bytes live on disk under UPLOAD_DIR, addressed by
+/// `sha256` (build step 5); a second upload of the same bytes by the same
+/// person is the same document (`documents_owner_id_sha256_key`).
+model Document {
+  id           String         @id @default(cuid())
+  ownerId      String         @map("owner_id")
+  collectionId String         @map("collection_id")
+  title        String
+  filename     String
+  mime         String
+  bytes        Int
+  sha256       String
+  status       DocumentStatus @default(QUEUED)
+  /// Why ingestion failed, in words a reader can act on. Set iff FAILED.
+  error        String?
+  /// Page count for a PDF; null for markdown and text, which have no pages.
+  pages        Int?
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  owner      User       @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "documents_owner_id_fkey")
+  /// Composite: the collection must be the same person's.
+  collection Collection @relation(fields: [collectionId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "documents_collection_same_owner_fkey")
+  chunks     Chunk[]
+
+  @@unique([ownerId, sha256], map: "documents_owner_id_sha256_key")
+  @@unique([id, ownerId], map: "documents_id_owner_id_key")
+  @@index([collectionId], map: "documents_collection_id_idx")
+  @@map("documents")
+}
+
+/// A passage of a document with its embedding. Written only with raw SQL:
+/// Prisma cannot read or write a halfvec, and every chunk set is replaced in
+/// one transaction by the ingest worker (build step 5).
+model Chunk {
+  id             String                       @id @default(cuid())
+  ownerId        String                       @map("owner_id")
+  documentId     String                       @map("document_id")
+  /// Position in the document, from 0, gap-free per document.
+  ord            Int
+  text           String
+  /// 1-based page range for a PDF; both null for markdown and text.
+  pageStart      Int?                         @map("page_start")
+  pageEnd        Int?                         @map("page_end")
+  /// [charStart, charEnd) in the document's normalised text.
+  charStart      Int                          @map("char_start")
+  charEnd        Int                          @map("char_end")
+  headingPath    String[]                     @default([]) @map("heading_path")
+  tokens         Int
+  /// qwen3-embedding:0.6b is 1024-dimensional and unit-normalised. Changing
+  /// EMBED_MODEL to one of another width is a migration plus a re-embed.
+  embedding      Unsupported("halfvec(1024)")
+  /// The model that produced `embedding`: retrieval refuses to mix models.
+  embeddingModel String                       @map("embedding_model")
+  /// English full-text vector of `text`, generated by Postgres.
+  tsv            Unsupported("tsvector")?     @default(dbgenerated())
+  createdAt      DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  owner     User       @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "chunks_owner_id_fkey")
+  /// Composite: the document must be the same person's.
+  document  Document   @relation(fields: [documentId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "chunks_document_same_owner_fkey")
+  citations Citation[]
+
+  @@unique([documentId, ord], map: "chunks_document_id_ord_key")
+  @@unique([id, ownerId], map: "chunks_id_owner_id_key")
+  /// The owner filter's prefilter, and "every chunk of this document".
+  @@index([ownerId, documentId], map: "chunks_owner_id_document_id_idx")
+  @@map("chunks")
+}
+
+/// A thread of questions, over one collection or (collectionId null) the
+/// whole library. Deleting the collection keeps the conversation and its
+/// answers; only the link is cleared (hand-written `SET NULL (collection_id)`).
+model Conversation {
+  id           String   @id @default(cuid())
+  ownerId      String   @map("owner_id")
+  collectionId String?  @map("collection_id")
+  title        String
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  owner      User        @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "conversations_owner_id_fkey")
+  collection Collection? @relation(fields: [collectionId], references: [id], onDelete: SetNull, map: "conversations_collection_id_fkey")
+  messages   Message[]
+
+  @@unique([id, ownerId], map: "conversations_id_owner_id_key")
+  @@index([ownerId, updatedAt(sort: Desc)], map: "conversations_owner_id_updated_at_idx")
+  @@map("conversations")
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+
+  @@map("message_role")
+}
+
+/// STREAMING while tokens arrive; STOPPED keeps the partial text the reader
+/// saw; FAILED says why. A question (USER) is always DONE.
+enum MessageStatus {
+  STREAMING
+  DONE
+  STOPPED
+  FAILED
+
+  @@map("message_status")
+}
+
+model Message {
+  id             String        @id @default(cuid())
+  ownerId        String        @map("owner_id")
+  conversationId String        @map("conversation_id")
+  role           MessageRole
+  content        String
+  status         MessageStatus
+  /// The chat model that wrote an answer; null on a question.
+  model          String?
+  /// Why an answer failed; set iff FAILED.
+  error          String?
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  owner        User            @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "messages_owner_id_fkey")
+  /// Composite: the conversation must be the same person's.
+  conversation Conversation    @relation(fields: [conversationId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "messages_conversation_same_owner_fkey")
+  citations    Citation[]
+  trace        RetrievalTrace?
+
+  @@unique([id, ownerId], map: "messages_id_owner_id_key")
+  @@index([conversationId, createdAt], map: "messages_conversation_id_created_at_idx")
+  @@map("messages")
+}
+
+/// One `[Sn]` marker in an answer, resolved to the passage it names. The
+/// title, page and quoted text are copied at answer time, so an answer whose
+/// document was later deleted still says what it cited (`chunk_id` is then
+/// null, by the hand-written `SET NULL (chunk_id)`).
+model Citation {
+  id            String   @id @default(cuid())
+  ownerId       String   @map("owner_id")
+  messageId     String   @map("message_id")
+  /// n in [Sn], 1-based.
+  marker        Int
+  chunkId       String?  @map("chunk_id")
+  documentTitle String   @map("document_title")
+  page          Int?
+  quote         String
+  /// [quoteStart, quoteEnd) inside the chunk's text.
+  quoteStart    Int      @map("quote_start")
+  quoteEnd      Int      @map("quote_end")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  owner   User    @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "citations_owner_id_fkey")
+  /// Composite: the answer must be the same person's.
+  message Message @relation(fields: [messageId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "citations_message_same_owner_fkey")
+  chunk   Chunk?  @relation(fields: [chunkId], references: [id], onDelete: SetNull, map: "citations_chunk_id_fkey")
+
+  @@unique([messageId, marker], map: "citations_message_id_marker_key")
+  @@map("citations")
+}
+
+/// What retrieval saw for one answer: the query, every candidate with its
+/// scores, and the timings. Kept so an answer can be audited after the fact.
+model RetrievalTrace {
+  id         String   @id @default(cuid())
+  ownerId    String   @map("owner_id")
+  messageId  String   @unique(map: "retrieval_traces_message_id_key") @map("message_id")
+  query      String
+  candidates Json
+  latencyMs  Int      @map("latency_ms")
+  embedModel String   @map("embed_model")
+  chatModel  String   @map("chat_model")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  owner   User    @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "retrieval_traces_owner_id_fkey")
+  /// Composite: the answer must be the same person's.
+  message Message @relation(fields: [messageId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "retrieval_traces_message_same_owner_fkey")
+
+  /// One trace per answer; Prisma needs the pair unique to make the
+  /// composite relation one-to-one.
+  @@unique([messageId, ownerId], map: "retrieval_traces_message_id_owner_id_key")
+  @@map("retrieval_traces")
 }

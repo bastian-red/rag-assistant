@@ -15,9 +15,17 @@
  *
  *   node scripts/db-drift.mjs     (DATABASE_URL)
  *
- * 0 = matches. 1 = drift, with the SQL that would close it. 2 = could not run.
+ * It first checks the ledger the other way round: every applied migration's
+ * checksum against its file. `prisma migrate deploy` skips an applied
+ * migration even when its file was edited afterwards, so a database migrated
+ * before an edit keeps the old SQL, and every lane run against it tests the
+ * old SQL (two fixed CHECKs "failed" in rag_it this way, 2026-11-01).
+ *
+ * 0 = matches. 1 = drift or an edited migration, with what to do. 2 = could not run.
  */
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,6 +35,35 @@ const url = process.env.DATABASE_URL;
 if (!url) {
   console.error('db-drift: DATABASE_URL is not set.');
   process.exit(2);
+}
+
+const migrations = join(dbPackage, 'prisma', 'migrations');
+const { PrismaClient } = createRequire(import.meta.url)(join(dbPackage, 'generated', 'client'));
+const ledger = new PrismaClient({ datasources: { db: { url } } });
+let applied;
+try {
+  applied = await ledger.$queryRawUnsafe(
+    'SELECT migration_name, checksum FROM _prisma_migrations WHERE finished_at IS NOT NULL',
+  );
+} catch (error) {
+  console.error(`db-drift: could not read the migration ledger: ${error.message}`);
+  process.exit(2);
+} finally {
+  await ledger.$disconnect();
+}
+const edited = applied.filter(({ migration_name: name, checksum }) => {
+  const file = join(migrations, name, 'migration.sql');
+  const exists = readdirSync(migrations).includes(name);
+  return !exists || createHash('sha256').update(readFileSync(file)).digest('hex') !== checksum;
+});
+if (edited.length > 0) {
+  const database = new URL(url).pathname.slice(1);
+  console.error(
+    `db-drift: ${database} applied ${edited.map((m) => m.migration_name).join(', ')} from a file that has since changed or gone.\n` +
+      'migrate deploy will never re-apply it, so this database holds SQL the repo no longer has.\n' +
+      `Recreate the database (for rag_it: drop it; ./scripts/integration.sh creates and migrates it again).`,
+  );
+  process.exit(1);
 }
 
 let diff;

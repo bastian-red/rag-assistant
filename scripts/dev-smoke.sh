@@ -14,8 +14,9 @@
 # Assert on content, never on a status code. A broken app answers 200 with an
 # error page. So this requires: the api's /health ok (Postgres, Redis, the
 # model server and both models); a sign-in through Auth.js; the library
-# rendering the seeded user's name as the API read it from Postgres (GET
-# /auth/me, so the web -> service token -> API -> database path is whole);
+# rendering the seeded user's name and collections as the API read them
+# from Postgres (GET /auth/me, GET /collections), so the web -> service
+# token -> API -> database path is whole;
 # and /status reading every service as up through the API.
 #
 # The model server must already be running at OLLAMA_URL (a real Ollama, or
@@ -178,16 +179,23 @@ grep -qF "$USER_EMAIL" <<<"$session" || {
   die "sign-in produced no session (${session}). AUTH_SECRET never reached a process, or the seed did not run."
 }
 
-echo "==> Checking the library renders the user as the API read them from Postgres"
+echo "==> Checking the library renders the user and their collections as the API read them"
 library="$(curl -s -L -b "$COOKIES" "${APP_BASE_URL}/")"
 grep -qF "$USER_NAME" <<<"$library" || {
   tail -150 "$LOG" >&2
   die "/ does not show '${USER_NAME}'. It is an error page or an empty shell."
 }
-grep -qF 'data-testid="empty-library"' <<<"$library" || {
+# The first person's seeded collections, read out of the seed: the page reads
+# them through GET /collections, so their names prove the owner-filtered read.
+mapfile -t SHELVES < <(grep -ozP "owner: FIRST_EMAIL,\s*collection: '\K[^']+" "$SEED" | tr '\0' '\n')
+[[ ${#SHELVES[@]} -gt 0 ]] || die "could not read FIRST_EMAIL's collections out of ${SEED}."
+grep -qF 'data-testid="collections"' <<<"$library" || {
   tail -150 "$LOG" >&2
-  die "/ is not the library page (web -> service token -> api -> Postgres)."
+  die "/ lists no collections (web -> service token -> api -> Postgres)."
 }
+for shelf in "${SHELVES[@]}"; do
+  grep -qF "<h3>${shelf}</h3>" <<<"$library" || die "/ does not list the seeded collection '${shelf}'."
+done
 
 echo "==> Checking /status reads every service through the API"
 status_page="$(curl -s "${APP_BASE_URL}/status")"

@@ -5,12 +5,15 @@ import {
   PG_UNIQUE_VIOLATION,
   PRISMA_FOREIGN_KEY_VIOLATION,
   PRISMA_UNIQUE_VIOLATION,
+  CHUNK_ORD_UNIQUE,
+  DOCUMENT_SHA256_UNIQUE,
   UNIQUE_INDEXES,
   UNIQUE_INDEX_COLUMNS,
   USER_EMAIL_UNIQUE,
 } from './constraints';
 import {
   isCheckViolation,
+  isForeignKeyViolation,
   isNotFound,
   isUniqueViolation,
   violatedConstraint,
@@ -102,6 +105,71 @@ describe('isNotFound', () => {
  * duplicate email through the API and asserts the 409, which is what proves these
  * shapes are the real ones rather than remembered ones.
  */
+/**
+ * What `$executeRaw` raises today (Prisma 5.22), captured from a real
+ * duplicate insert on 2026-11-01: P2010 with the SQLSTATE in meta.code, and
+ * the index NAME nowhere, only its columns. Every chunk write takes this path.
+ */
+const rawP2010 = (sqlstate: string, detail: string) => ({
+  name: 'PrismaClientKnownRequestError',
+  code: 'P2010',
+  meta: { code: sqlstate, message: detail },
+  message: `\nInvalid \`prisma.$executeRaw()\` invocation:\n\n\nRaw query failed. Code: \`${sqlstate}\`. Message: \`${detail}\``,
+});
+
+describe('a raw query failure (P2010)', () => {
+  const duplicateChunk = rawP2010(
+    PG_UNIQUE_VIOLATION,
+    'Key (document_id, ord)=(d1, 0) already exists.',
+  );
+
+  it('is a unique violation, read from meta.code', () => {
+    expect(isUniqueViolation(duplicateChunk)).toBe(true);
+    expect(isCheckViolation(duplicateChunk)).toBe(false);
+  });
+
+  it('names its index by the columns in the detail', () => {
+    expect(violatedUniqueIndex(duplicateChunk, CHUNK_ORD_UNIQUE)).toBe(true);
+    expect(violatedUniqueIndex(duplicateChunk, DOCUMENT_SHA256_UNIQUE)).toBe(false);
+  });
+
+  it('reads quoted column names too', () => {
+    const quoted = rawP2010(
+      PG_UNIQUE_VIOLATION,
+      'Key ("owner_id", "sha256")=(u, x) already exists.',
+    );
+    expect(violatedUniqueIndex(quoted, DOCUMENT_SHA256_UNIQUE)).toBe(true);
+  });
+
+  it('classifies a CHECK and a foreign key through meta.code', () => {
+    const check = rawP2010(
+      PG_CHECK_VIOLATION,
+      'new row for relation "chunks" violates check constraint "chunks_span_check"',
+    );
+    expect(isCheckViolation(check)).toBe(true);
+    expect(violatedConstraint(check, 'chunks_span_check')).toBe(true);
+    expect(isForeignKeyViolation(rawP2010('23503', 'violates foreign key constraint'))).toBe(true);
+  });
+
+  it('is none of them for another SQLSTATE', () => {
+    const syntax = rawP2010('42601', 'syntax error at or near "SELEC"');
+    expect([
+      isUniqueViolation(syntax),
+      isCheckViolation(syntax),
+      isForeignKeyViolation(syntax),
+    ]).toEqual([false, false, false]);
+  });
+});
+
+describe('UNIQUE_INDEX_COLUMNS', () => {
+  it('gives every index its own column set, so a raw error matches exactly one', () => {
+    const sets = Object.values(UNIQUE_INDEX_COLUMNS).map((columns) =>
+      [...columns].sort().join(','),
+    );
+    expect(new Set(sets).size).toBe(sets.length);
+  });
+});
+
 describe('violatedUniqueIndex', () => {
   /** What the typed client raises: a `code`, columns in `meta.target`, no index name anywhere. */
   function typedClient(columns: readonly string[]): unknown {

@@ -14,6 +14,8 @@
 /** Every length limit, in characters unless the name says otherwise. */
 export const LIMITS = Object.freeze({
   collectionName: 80,
+  documentTitle: 200,
+  conversationTitle: 200,
   question: 2_000,
   /** One uploaded file. A 300-page text PDF is about 5 MB. */
   uploadBytes: 20 * 1024 * 1024,

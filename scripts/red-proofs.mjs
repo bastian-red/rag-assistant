@@ -70,6 +70,42 @@ const PROOFS = [
     to: 'return trimmed;',
     suite: ['unit', '@rag/shared'],
   },
+  // --- the library: ownership, error classification, the seed ---------------
+  {
+    name: 'collections listed without the owner filter',
+    file: 'apps/api/src/collections/collections.service.ts',
+    from: '        where: { ownerId },\n        select: { id: true, name: true },',
+    to: '        select: { id: true, name: true },',
+    suite: ['integration', 'collections'],
+  },
+  {
+    name: 'a raw query failure read as its Prisma code, not its SQLSTATE',
+    file: 'packages/db/src/errors.ts',
+    from: "if (code === PRISMA_RAW_QUERY_FAILED && typeof meta?.code === 'string') return meta.code;",
+    to: '',
+    suite: ['unit', '@rag/db'],
+  },
+  {
+    name: 'a raw unique violation matched by name only',
+    file: 'packages/db/src/errors.ts',
+    from: '.meta?.target ?? keyColumns(error);',
+    to: '.meta?.target;',
+    suite: ['unit', '@rag/db'],
+  },
+  {
+    name: 'document counts fold a reading state away',
+    file: 'packages/shared/src/contracts/library.ts',
+    from: "export const IN_PROGRESS_STATUSES: readonly DocumentStatus[] = ['QUEUED', 'PARSING', 'EMBEDDING'];",
+    to: "export const IN_PROGRESS_STATUSES: readonly DocumentStatus[] = ['QUEUED', 'PARSING'];",
+    suite: ['unit', '@rag/shared'],
+  },
+  {
+    name: 'a zero count printed as data',
+    file: 'apps/web/lib/library.ts',
+    from: "  if (counts.total === 0) return { total: 'No documents yet', detail: null };\n",
+    to: '',
+    suite: ['unit', '@rag/web'],
+  },
   // --- the web app is private by default -----------------------------------
   {
     name: 'web proxy protects only the pages it lists',

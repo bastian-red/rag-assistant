@@ -12,6 +12,7 @@ import {
   PG_UNIQUE_VIOLATION,
   PRISMA_FOREIGN_KEY_VIOLATION,
   PRISMA_NOT_FOUND,
+  PRISMA_RAW_QUERY_FAILED,
   PRISMA_UNIQUE_VIOLATION,
 } from './constraints';
 
@@ -25,8 +26,21 @@ import {
  */
 function codeOf(error: unknown): string | undefined {
   if (typeof error !== 'object' || error === null) return undefined;
-  const code = (error as { code?: unknown }).code;
+  const { code, meta } = error as { code?: unknown; meta?: { code?: unknown } };
+  // A raw query (every chunk write) fails as P2010, "raw query failed", with
+  // the SQLSTATE in meta.code. Read as P2010 it is none of the violations
+  // below, and a duplicate chunk would surface as a 500.
+  if (code === PRISMA_RAW_QUERY_FAILED && typeof meta?.code === 'string') return meta.code;
   return typeof code === 'string' ? code : undefined;
+}
+
+/**
+ * The columns Postgres names in a unique violation's detail, `Key (a, b)=(...)`.
+ * A raw query's error carries this and NOT the index name.
+ */
+function keyColumns(error: unknown): string[] | undefined {
+  const detail = /Key \(([^)]+)\)=/u.exec(messageOf(error));
+  return detail?.[1]?.split(',').map((column) => column.trim().replaceAll('"', ''));
 }
 
 function messageOf(error: unknown): string {
@@ -80,7 +94,8 @@ export function violatedUniqueIndex(error: unknown, name: string): boolean {
   const columns = UNIQUE_INDEX_COLUMNS[name];
   if (columns === undefined) return false;
 
-  const target = (error as { meta?: { target?: unknown } }).meta?.target;
+  // Typed client: the columns in meta.target. Raw query: in the message detail.
+  const target = (error as { meta?: { target?: unknown } }).meta?.target ?? keyColumns(error);
   if (!Array.isArray(target)) return false;
 
   const reported = new Set(target.filter((value): value is string => typeof value === 'string'));
