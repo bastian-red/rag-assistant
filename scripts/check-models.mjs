@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Is the model server up, and are CHAT_MODEL and EMBED_MODEL pulled?
+ * Is the model server up, are CHAT_MODEL and EMBED_MODEL pulled, and can each
+ * do its job (a thinking-only chat build cannot)?
  *
  * Run by scripts/dev.sh before turbo starts, so a missing model is one
  * sentence with the command that fixes it, not a failed question later. It
@@ -8,14 +9,14 @@
  *
  *   node scripts/check-models.mjs   (OLLAMA_URL, CHAT_MODEL, EMBED_MODEL)
  *
- * 0 = ready. 1 = unreachable or a model missing, with the fix. 2 = misconfigured.
+ * 0 = ready. 1 = unreachable, a model missing or unfit, with the fix. 2 = misconfigured.
  */
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { createOllama, missingModels } = createRequire(import.meta.url)(
+const { createOllama, missingModels, modelProblems } = createRequire(import.meta.url)(
   join(root, 'services', 'llm', 'dist', 'index.js'),
 );
 
@@ -34,6 +35,13 @@ try {
     console.error(`The model server at ${url} does not have: ${missing.join(', ')}. Pull them:`);
     for (const model of missing) console.error(`  ollama pull ${model}`);
     console.error('or run ./scripts/ollama-setup.sh, which installs Ollama and pulls both.');
+    process.exit(1);
+  }
+  const problems = modelProblems(status);
+  if (problems.length > 0) {
+    console.error(`A configured model cannot do its job:`);
+    for (const problem of problems) console.error(`  ${problem}`);
+    console.error('Set CHAT_MODEL / EMBED_MODEL in .env (see .env.example) and pull it.');
     process.exit(1);
   }
   console.log(`models: ${chat} and ${embed} are ready at ${url}`);

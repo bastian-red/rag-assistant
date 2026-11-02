@@ -54,7 +54,7 @@ export interface ApiConfig {
   authSecret: string;
   /** The model server (Ollama). Only `@rag/llm` talks to it. */
   ollamaUrl: string;
-  /** The chat model, an Ollama reference such as `qwen3:4b`. */
+  /** The chat model, an Ollama reference such as `qwen3:4b-instruct`. */
   chatModel: string;
   /** The embedding model, an Ollama reference such as `qwen3-embedding:0.6b`. */
   embedModel: string;

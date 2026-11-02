@@ -30,7 +30,8 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,cjs,mjs,json,md}\"",
     "prepare": "node scripts/install-hooks.mjs",
     "ollama:setup": "./scripts/ollama-setup.sh",
-    "ollama:fake": "turbo run build --filter=@rag/llm --output-logs=errors-only && node services/llm/dist/fake/main.js"
+    "ollama:fake": "turbo run build --filter=@rag/llm --output-logs=errors-only && node services/llm/dist/fake/main.js",
+    "llm:contract:real": "./scripts/llm-contract-real.sh"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm exec node scripts/pre-commit.mjs"

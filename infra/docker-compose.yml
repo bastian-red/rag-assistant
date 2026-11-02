@@ -14,7 +14,7 @@
 #
 #   COMPOSE_OLLAMA_URL=http://ollama:11434 docker compose -f infra/docker-compose.yml \
 #     --profile app --profile ollama up -d --build
-#   docker exec rag-ollama ollama pull qwen3:4b
+#   docker exec rag-ollama ollama pull qwen3:4b-instruct
 #   docker exec rag-ollama ollama pull qwen3-embedding:0.6b
 
 # Explicit, and not optional. Without it Compose derives the project name from the

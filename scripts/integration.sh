@@ -39,7 +39,7 @@ pnpm exec turbo run build --filter='!@rag/web' --output-logs=errors-only >/dev/n
 # The fake model server, with both configured models listed, so /health is
 # green for the right reason. Stopped on any exit.
 FAKE_PORT="${INTEGRATION_FAKE_OLLAMA_PORT:-11535}"
-export CHAT_MODEL="${CHAT_MODEL:-qwen3:4b}"
+export CHAT_MODEL="${CHAT_MODEL:-qwen3:4b-instruct}"
 export EMBED_MODEL="${EMBED_MODEL:-qwen3-embedding:0.6b}"
 export OLLAMA_URL="http://127.0.0.1:${FAKE_PORT}"
 node services/llm/dist/fake/main.js --port "$FAKE_PORT" --models "${CHAT_MODEL},${EMBED_MODEL}" &

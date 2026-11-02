@@ -50,7 +50,7 @@ describe('GET /health', () => {
 
   it('is 503 naming the model that is not pulled, with the command that fixes it', async () => {
     const chatOnly: FakeOllama = await startFakeOllama({
-      models: [process.env.CHAT_MODEL ?? 'qwen3:4b'],
+      models: [process.env.CHAT_MODEL ?? 'qwen3:4b-instruct'],
     });
     try {
       await withModelServer(chatOnly.url, async (other) => {
@@ -66,6 +66,28 @@ describe('GET /health', () => {
       });
     } finally {
       await chatOnly.close();
+    }
+  });
+
+  it('is 503 naming a thinking-only chat build, though both models are pulled', async () => {
+    const chat = process.env.CHAT_MODEL ?? 'qwen3:4b-instruct';
+    const embed = process.env.EMBED_MODEL ?? 'qwen3-embedding:0.6b';
+    const thinking: FakeOllama = await startFakeOllama({
+      models: [chat, embed],
+      thinkingOnly: [chat],
+    });
+    try {
+      await withModelServer(thinking.url, async (other) => {
+        const r = await call(other, 'GET', '/health');
+        expect(r.status).toBe(503);
+        const models = healthSchema.parse(r.body).checks.find((c) => c.name === 'models');
+        expect(models).toMatchObject({ status: 'fail' });
+        expect(models?.detail).toBe(
+          `${chat}: a thinking-only build: it writes its reasoning into every answer (use an instruct build, such as qwen3:4b-instruct)`,
+        );
+      });
+    } finally {
+      await thinking.close();
     }
   });
 

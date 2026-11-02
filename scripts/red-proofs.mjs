@@ -211,6 +211,77 @@ const PROOFS = [
     suite: ['integration', 'library'],
     freshDatabase: 'rag_proof',
   },
+  // --- the model client: chat, embeddings, readiness (build step 4) ---------
+  {
+    name: 'a thinking-only chat build reported as ready',
+    file: 'services/llm/src/ollama.ts',
+    from: '  if (show.thinking !== undefined && !show.thinking.values.includes(false)) {\n',
+    to: '  if (false) {\n',
+    suite: ['unit', '@rag/llm'],
+  },
+  {
+    name: 'health ignores a model that cannot do its job',
+    file: 'apps/api/src/health/health.service.ts',
+    from: '      ...problems,\n',
+    to: '',
+    suite: ['integration', 'health'],
+  },
+  {
+    name: 'reasoning inside <think> reaches the reader',
+    file: 'services/llm/src/think.ts',
+    from: '        if (this.inside) this.dropped += codePoints(before);\n        else visible += before;\n',
+    to: '        visible += before;\n',
+    suite: ['unit', '@rag/llm'],
+  },
+  {
+    name: 'leaving the stream early leaves the request open',
+    file: 'services/llm/src/ndjson.ts',
+    from: '    await reader.cancel().catch(() => undefined);\n',
+    to: '',
+    suite: ['unit', '@rag/llm'],
+  },
+  {
+    name: 'tokens already read pass a stop',
+    file: 'services/llm/src/ollama.ts',
+    from: '          if (controller.signal.aborted) throw abortedBy(controller.signal);\n',
+    to: '',
+    suite: ['unit', '@rag/llm'],
+  },
+  {
+    name: 'no clock on the first token',
+    file: 'services/llm/src/ollama.ts',
+    from: "    arm(firstTokenTimeoutMs, 'no first token');\n",
+    to: '',
+    suite: ['unit', '@rag/llm'],
+  },
+  {
+    name: 'a slow consumer counted as a silent model',
+    file: 'services/llm/src/ollama.ts',
+    from: "            clearTimeout(timer);\n            yield { type: 'token', text };\n",
+    to: "            yield { type: 'token', text };\n",
+    suite: ['unit', '@rag/llm'],
+  },
+  {
+    name: 'an embed reply with the wrong vector count accepted',
+    file: 'services/llm/src/ollama.ts',
+    from: '    if (vectors.length !== input.length) {\n',
+    to: '    if (false) {\n',
+    suite: ['unit', '@rag/llm'],
+  },
+  {
+    name: 'a passage can close its own source fence',
+    file: 'packages/shared/src/contracts/sources.ts',
+    from: '  return text.replace(ESCAPABLE, (match: string) =>\n',
+    to: '  return text.replace(/(?!)/u, (match: string) =>\n',
+    suite: ['unit', '@rag/shared'],
+  },
+  {
+    name: 'the fake does not see a closed stream',
+    file: 'services/llm/src/fake/server.ts',
+    from: '      if (!finished) record.aborted = true;\n',
+    to: '',
+    suite: ['unit', '@rag/llm'],
+  },
 ];
 
 const filters = process.argv.slice(2);

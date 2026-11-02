@@ -2,12 +2,17 @@
 /**
  * Run the fake model server from a script:
  *
- *   node services/llm/dist/fake/main.js --port 11435 --models qwen3:4b,qwen3-embedding:0.6b
+ *   node services/llm/dist/fake/main.js --port 11535 \
+ *     --models qwen3:4b-instruct,qwen3-embedding:0.6b \
+ *     [--thinking-only qwen3:4b] [--dimensions 1024] [--token-delay-ms 20]
  *
  * Arguments, not environment variables, on purpose: this process is started by
  * the test scripts, and every environment name the source reads must be
  * declared to turbo (`scripts/env-contract.mjs`). The fake has no business in
  * the app's environment.
+ *
+ * `--token-delay-ms` paces the stream so a spec can press Stop mid-answer;
+ * `PUT /__fake/chat` changes it, and the rest of the script, at run time.
  */
 import { startFakeOllama } from './server';
 
@@ -16,18 +21,31 @@ function arg(name: string): string | undefined {
   return index === -1 ? undefined : process.argv[index + 1];
 }
 
-const port = Number(arg('port') ?? '11435');
-const models = (arg('models') ?? '')
-  .split(',')
-  .map((m) => m.trim())
-  .filter((m) => m !== '');
+const list = (value: string | undefined) =>
+  (value ?? '')
+    .split(',')
+    .map((m) => m.trim())
+    .filter((m) => m !== '');
 
-if (!Number.isInteger(port) || port < 1 || port > 65535) {
-  console.error(`fake-ollama: --port must be 1-65535, got ${String(arg('port'))}`);
-  process.exit(2);
+function integer(name: string, fallback: number, min: number, max: number): number {
+  const raw = arg(name);
+  const value = raw === undefined ? fallback : Number(raw);
+  if (!Number.isInteger(value) || value < min || value > max) {
+    console.error(
+      `fake-ollama: --${name} must be an integer ${String(min)}-${String(max)}, got ${String(raw)}`,
+    );
+    process.exit(2);
+  }
+  return value;
 }
 
-startFakeOllama({ port, models })
+const port = integer('port', 11435, 1, 65535);
+const dimensions = integer('dimensions', 1024, 1, 16_000);
+const tokenDelayMs = integer('token-delay-ms', 0, 0, 60_000);
+const models = list(arg('models'));
+const thinkingOnly = list(arg('thinking-only'));
+
+startFakeOllama({ port, models, thinkingOnly, dimensions, script: { tokenDelayMs } })
   .then((fake) => {
     console.warn(`[fake-ollama] listening on ${fake.url} with ${models.join(', ') || 'no models'}`);
     const stop = () => {

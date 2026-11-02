@@ -2,22 +2,118 @@
  * An Ollama-compatible fake, for every lane that must run with no model:
  * integration, E2E, dev-smoke and CI.
  *
- * It speaks the same HTTP shapes the real server does, so `createOllama` is
- * exercised unchanged against it; nothing in the app knows it is talking to a
- * fake. Build step 1 serves `/api/version` and `/api/tags`; build step 4 adds
- * `/api/embed` (deterministic hashed vectors) and `/api/chat` (a scripted,
- * streamed answer that cites the sources it was given).
+ * It speaks the HTTP shapes the real server does (measured against 0.40.12;
+ * the contract suite runs the same assertions against both), so the client is
+ * exercised unchanged and nothing in the app knows it is talking to a fake:
  *
- * Every request is recorded, so a test can assert what reached the model
- * server (and, from step 4, that an aborted stream was really aborted).
+ * - `GET /api/version`, `GET /api/tags`
+ * - `POST /api/show`: capabilities by name (`embed` in the name is an embedding
+ *   model, anything else a chat model), and `thinking: {values: [true]}` for
+ *   the names in `thinkingOnly`, as a thinking-only build reports
+ * - `POST /api/embed`: `hashEmbedding` vectors (deterministic, L2-normalised)
+ * - `POST /api/chat`: `scriptedAnswer` (the first sentence of each given
+ *   source with its marker), streamed as NDJSON in `streamPieces`, then a
+ *   `done` line with counts; `stream: false` answers in one object
  *
- * `PUT /__fake/models` with `{"models": [...]}` replaces what `/api/tags`
- * lists. It exists so an E2E spec, which cannot reach into this process, can
- * make a model "disappear" and watch `/health` and `/status` say so. The real
- * Ollama has no such route, and nothing in the app calls it.
+ * Errors as Ollama words them: 404 `model 'x' not found`, 400 `"x" does not
+ * support chat`, 501 for embeddings from a chat model, 400 for a body that is
+ * not JSON or has no model, and a plain-text 404 for an unknown route.
+ *
+ * Every chat is recorded with whether the client went away before the end
+ * (`aborted`), which is how the stop guarantee (SPECS outcome 5) is observed.
+ *
+ * Control routes, for specs that cannot reach into this process (the real
+ * Ollama has none of them, and nothing in the app calls them):
+ *
+ * - `PUT /__fake/models` `{models, thinkingOnly?}`: what is pulled
+ * - `PUT /__fake/chat` (a partial `FakeChatScript`), `DELETE /__fake/chat`: how it answers
+ * - `GET /__fake/log`: requests, chats and embeds; `DELETE /__fake/log` clears it
  */
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+
+import { chatMessageSchema, normaliseModel, type ChatMessage } from '@rag/shared';
+import { z } from 'zod';
+
+import { scriptedAnswer, streamPieces } from './answer';
+import { hashEmbedding } from './embedding';
+
+/** How the fake answers. Every field has a default; a script overrides some. */
+export interface FakeChatScript {
+  /** The whole answer; null derives it from the sources in the prompt. */
+  readonly answer: string | null;
+  /**
+   * Reasoning to emit before the answer: in the `thinking` field when the
+   * request allows thinking, else inside `<think>…</think>` in the content,
+   * the way a template that tags its reasoning leaks it.
+   */
+  readonly thinking: string;
+  /** Between pieces. */
+  readonly tokenDelayMs: number;
+  /** Before the first piece (a cold model load). */
+  readonly firstTokenDelayMs: number;
+  /** Send this many pieces, then go silent with the connection open. */
+  readonly stallAfter: number | null;
+  /** Send this many pieces, then an `{"error"}` line, as a crashed runner does. */
+  readonly failAfter: number | null;
+}
+
+const DEFAULT_SCRIPT: FakeChatScript = {
+  answer: null,
+  thinking: '',
+  tokenDelayMs: 0,
+  firstTokenDelayMs: 0,
+  stallAfter: null,
+  failAfter: null,
+};
+
+const scriptSchema = z
+  .object({
+    answer: z.string().nullable(),
+    thinking: z.string(),
+    tokenDelayMs: z.number().int().min(0).max(60_000),
+    firstTokenDelayMs: z.number().int().min(0).max(600_000),
+    stallAfter: z.number().int().min(0).nullable(),
+    failAfter: z.number().int().min(0).nullable(),
+  })
+  .strict()
+  .partial();
+
+const modelsSchema = z
+  .object({ models: z.array(z.string()), thinkingOnly: z.array(z.string()).optional() })
+  .strict();
+
+const chatBodySchema = z.object({
+  model: z.string().min(1),
+  messages: z.array(chatMessageSchema),
+  stream: z.boolean().optional(),
+  think: z.boolean().optional(),
+  options: z.record(z.string(), z.unknown()).optional(),
+});
+
+const embedBodySchema = z.object({
+  model: z.string().min(1),
+  input: z.union([z.string(), z.array(z.string())]),
+  truncate: z.boolean().optional(),
+});
+
+export interface FakeChatRecord {
+  readonly model: string;
+  readonly messages: readonly ChatMessage[];
+  readonly think: boolean | undefined;
+  readonly options: Readonly<Record<string, unknown>>;
+  /** Content pieces written before the end or the abort. */
+  piecesSent: number;
+  /** The client closed the connection before the last line. */
+  aborted: boolean;
+  /** The `done` line was written. */
+  completed: boolean;
+}
+
+export interface FakeEmbedRecord {
+  readonly model: string;
+  readonly inputs: number;
+}
 
 export interface FakeOllamaOptions {
   /** 0 picks a free port. */
@@ -25,60 +121,252 @@ export interface FakeOllamaOptions {
   readonly host?: string;
   /** What `/api/tags` lists, as Ollama would name them. */
   readonly models: readonly string[];
+  /** Pulled models that report themselves thinking-only. */
+  readonly thinkingOnly?: readonly string[];
+  /** Embedding dimensions. Default 1024. */
+  readonly dimensions?: number;
+  readonly script?: Partial<FakeChatScript>;
 }
 
 export interface FakeOllama {
   readonly url: string;
   readonly requests: readonly { method: string; path: string }[];
-  /** Replace what `/api/tags` lists (the in-process form of `PUT /__fake/models`). */
-  setModels(models: readonly string[]): void;
+  readonly chats: readonly FakeChatRecord[];
+  readonly embeds: readonly FakeEmbedRecord[];
+  /** The in-process form of `PUT /__fake/models`. */
+  setModels(models: readonly string[], thinkingOnly?: readonly string[]): void;
+  /** The in-process form of `PUT /__fake/chat`; `null` resets to the defaults. */
+  setScript(script: Partial<FakeChatScript> | null): void;
   close(): Promise<void>;
 }
 
 const VERSION = '0.0.0-fake';
+const isEmbeddingModel = (name: string) => /embed/iu.test(name);
+const sleep = (ms: number) =>
+  ms > 0 ? new Promise<void>((resolve) => setTimeout(resolve, ms)) : Promise.resolve();
 
 export async function startFakeOllama(options: FakeOllamaOptions): Promise<FakeOllama> {
   const requests: { method: string; path: string }[] = [];
+  const chats: FakeChatRecord[] = [];
+  const embeds: FakeEmbedRecord[] = [];
+  const dimensions = options.dimensions ?? 1024;
   let models: readonly string[] = [...options.models];
+  let thinkingOnly = new Set((options.thinkingOnly ?? []).map(normaliseModel));
+  let script: FakeChatScript = { ...DEFAULT_SCRIPT, ...options.script };
+  const open = new Set<ServerResponse>();
+
+  const pulled = (model: string) => models.some((m) => normaliseModel(m) === normaliseModel(model));
+  const setModels = (next: readonly string[], thinking: readonly string[] = []) => {
+    models = [...next];
+    thinkingOnly = new Set(thinking.map(normaliseModel));
+  };
 
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
     const path = new URL(request.url ?? '/', 'http://fake').pathname;
-    requests.push({ method: request.method ?? 'GET', path });
+    const method = request.method ?? 'GET';
+    requests.push({ method, path });
+    open.add(response);
+    response.on('close', () => open.delete(response));
 
     const json = (status: number, body: unknown) => {
       response.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
       response.end(JSON.stringify(body));
     };
+    const error = (status: number, message: string) => json(status, { error: message });
 
-    if (request.method === 'GET' && path === '/api/version') {
-      return json(200, { version: VERSION });
-    }
-    if (request.method === 'GET' && path === '/api/tags') {
-      return json(200, {
-        models: models.map((name) => ({ name, model: name, size: 0, digest: 'fake' })),
-      });
-    }
-    if (request.method === 'PUT' && path === '/__fake/models') {
+    /** The body as JSON, or a 400 in Ollama's words and `undefined`. */
+    const readJson = async (): Promise<unknown> => {
       let raw = '';
-      request.on('data', (chunk: Buffer) => (raw += chunk.toString('utf8')));
-      request.on('end', () => {
-        try {
-          const body = JSON.parse(raw) as { models?: unknown };
-          if (!Array.isArray(body.models) || !body.models.every((m) => typeof m === 'string')) {
-            return json(400, { error: 'models must be an array of strings' });
-          }
-          models = [...(body.models as string[])];
-          return json(200, { models });
-        } catch {
-          return json(400, { error: 'body must be JSON' });
+      for await (const chunk of request) raw += (chunk as Buffer).toString('utf8');
+      try {
+        return JSON.parse(raw) as unknown;
+      } catch {
+        error(400, 'invalid character in request body: not JSON');
+        return undefined;
+      }
+    };
+
+    const route = async () => {
+      if (method === 'GET' && path === '/api/version') return json(200, { version: VERSION });
+      if (method === 'GET' && path === '/api/tags') {
+        return json(200, {
+          models: models.map((name) => ({ name, model: name, size: 0, digest: 'fake' })),
+        });
+      }
+      if (method === 'POST' && path === '/api/show') {
+        const body = await readJson();
+        if (body === undefined) return;
+        const model = (body as { model?: unknown } | null)?.model;
+        if (typeof model !== 'string' || model === '') return error(400, 'model is required');
+        if (!pulled(model)) return error(404, `model '${model}' not found`);
+        const embedding = isEmbeddingModel(model);
+        return json(200, {
+          capabilities: embedding ? ['embedding'] : ['completion', 'tools', 'thinking'],
+          details: {
+            format: 'gguf',
+            family: 'fake',
+            parameter_size: '0',
+            quantization_level: 'none',
+          },
+          ...(thinkingOnly.has(normaliseModel(model))
+            ? { thinking: { values: [true], default: true } }
+            : {}),
+        });
+      }
+      if (method === 'POST' && path === '/api/embed') {
+        const raw = await readJson();
+        if (raw === undefined) return;
+        const body = embedBodySchema.safeParse(raw);
+        if (!body.success)
+          return error(400, 'model is required, and input is a string or a list of strings');
+        const { model } = body.data;
+        if (!pulled(model)) return error(404, `model '${model}' not found`);
+        if (!isEmbeddingModel(model)) {
+          return error(
+            501,
+            'This server does not support embeddings. Start it with `--embeddings`',
+          );
         }
-      });
-      return;
-    }
-    // Ollama answers an unknown route with a plain-text 404.
-    response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
-    response.end('404 page not found');
+        const input = typeof body.data.input === 'string' ? [body.data.input] : body.data.input;
+        embeds.push({ model, inputs: input.length });
+        return json(200, {
+          model,
+          embeddings: input.map((text) => hashEmbedding(text, dimensions)),
+          total_duration: 0,
+          load_duration: 0,
+          prompt_eval_count: input.reduce((sum, text) => sum + Math.ceil(text.length / 4), 0),
+        });
+      }
+      if (method === 'POST' && path === '/api/chat') return chat(response, await readJson());
+      if (method === 'PUT' && path === '/__fake/models') {
+        const body = modelsSchema.safeParse(await readJsonQuiet(request));
+        if (!body.success) return error(400, 'models must be an array of strings');
+        setModels(body.data.models, body.data.thinkingOnly);
+        return json(200, { models, thinkingOnly: [...thinkingOnly] });
+      }
+      if (method === 'PUT' && path === '/__fake/chat') {
+        const body = scriptSchema.safeParse(await readJsonQuiet(request));
+        if (!body.success)
+          return error(400, `not a chat script: ${body.error.issues[0]?.message ?? ''}`);
+        script = { ...script, ...body.data };
+        return json(200, script);
+      }
+      if (method === 'DELETE' && path === '/__fake/chat') {
+        script = { ...DEFAULT_SCRIPT, ...options.script };
+        return json(200, script);
+      }
+      if (method === 'GET' && path === '/__fake/log') return json(200, { requests, chats, embeds });
+      if (method === 'DELETE' && path === '/__fake/log') {
+        requests.length = 0;
+        chats.length = 0;
+        embeds.length = 0;
+        return json(200, {});
+      }
+      // Ollama answers an unknown route with a plain-text 404.
+      response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      response.end('404 page not found');
+    };
+
+    route().catch(() => {
+      if (!response.headersSent) error(500, 'fake: internal error');
+      else response.destroy();
+    });
   });
+
+  async function chat(response: ServerResponse, raw: unknown) {
+    if (raw === undefined) return; // readJson already answered 400
+    const send = (status: number, body: unknown) => {
+      response.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
+      response.end(JSON.stringify(body));
+    };
+    const body = chatBodySchema.safeParse(raw);
+    if (!body.success)
+      return send(400, { error: 'model is required, and messages is a list of {role, content}' });
+    const { model, messages, think } = body.data;
+    if (!pulled(model)) return send(404, { error: `model '${model}' not found` });
+    if (isEmbeddingModel(model)) return send(400, { error: `"${model}" does not support chat` });
+
+    const plan = script; // a script change mid-stream does not change this answer
+    const answer = plan.answer ?? scriptedAnswer(messages);
+    const record: FakeChatRecord = {
+      model,
+      messages,
+      think,
+      options: body.data.options ?? {},
+      piecesSent: 0,
+      aborted: false,
+      completed: false,
+    };
+    chats.push(record);
+    let finished = false;
+    response.on('close', () => {
+      if (!finished) record.aborted = true;
+    });
+
+    const thinkingInField = plan.thinking !== '' && think !== false;
+    const content =
+      plan.thinking !== '' && !thinkingInField
+        ? `<think>${plan.thinking}</think>\n\n${answer}`
+        : answer;
+    const pieces = streamPieces(content);
+    const promptTokens = messages.reduce((sum, m) => sum + Math.ceil(m.content.length / 4), 0);
+    const line = (fields: Record<string, unknown>) =>
+      `${JSON.stringify({ model, created_at: new Date().toISOString(), ...fields })}\n`;
+    const doneFields = {
+      done: true,
+      done_reason: 'stop',
+      total_duration: 1_000_000,
+      load_duration: 0,
+      prompt_eval_count: promptTokens,
+      prompt_eval_cached_count: 0,
+      prompt_eval_duration: 500_000,
+      eval_count: pieces.length,
+      eval_duration: 500_000,
+    };
+
+    if (body.data.stream === false) {
+      finished = true;
+      record.completed = true;
+      return send(200, {
+        model,
+        created_at: new Date().toISOString(),
+        message: {
+          role: 'assistant',
+          content: thinkingInField ? answer : content,
+          ...(thinkingInField ? { thinking: plan.thinking } : {}),
+        },
+        ...doneFields,
+      });
+    }
+
+    response.writeHead(200, { 'content-type': 'application/x-ndjson' });
+    const write = (text: string) => !record.aborted && response.write(text);
+    await sleep(plan.firstTokenDelayMs);
+    if (thinkingInField) {
+      for (const piece of streamPieces(plan.thinking)) {
+        if (record.aborted) return;
+        write(line({ message: { role: 'assistant', content: '', thinking: piece }, done: false }));
+        await sleep(plan.tokenDelayMs);
+      }
+    }
+    for (const [index, piece] of pieces.entries()) {
+      if (record.aborted) return;
+      if (plan.stallAfter !== null && index >= plan.stallAfter) return; // silent, still open
+      if (plan.failAfter !== null && index >= plan.failAfter) {
+        finished = true;
+        write(`${JSON.stringify({ error: 'fake: the model runner stopped' })}\n`);
+        response.end();
+        return;
+      }
+      write(line({ message: { role: 'assistant', content: piece }, done: false }));
+      record.piecesSent += 1;
+      await sleep(index === pieces.length - 1 ? 0 : plan.tokenDelayMs);
+    }
+    if (record.aborted) return;
+    finished = true;
+    record.completed = true;
+    response.end(line({ message: { role: 'assistant', content: '' }, ...doneFields }));
+  }
 
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
@@ -89,12 +377,30 @@ export async function startFakeOllama(options: FakeOllamaOptions): Promise<FakeO
   return {
     url: `http://${address.address}:${String(address.port)}`,
     requests,
-    setModels: (next) => {
-      models = [...next];
+    chats,
+    embeds,
+    setModels,
+    setScript: (next) => {
+      script = next === null ? { ...DEFAULT_SCRIPT, ...options.script } : { ...script, ...next };
     },
     close: () =>
       new Promise<void>((resolve, reject) => {
+        // A stalled stream would hold `close` open forever, and an idle
+        // keep-alive socket holds it for seconds.
+        for (const response of open) response.destroy();
         server.close((error) => (error ? reject(error) : resolve()));
+        server.closeAllConnections();
       }),
   };
+}
+
+/** A control route's body: JSON or null, never a 400 of its own. */
+async function readJsonQuiet(request: IncomingMessage): Promise<unknown> {
+  let raw = '';
+  for await (const chunk of request) raw += (chunk as Buffer).toString('utf8');
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return null;
+  }
 }

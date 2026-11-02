@@ -11,11 +11,13 @@
  *   ingest queue.
  * - **ollama** asks the model server for its model list. Reachable or not.
  * - **models** reads the same list for the configured chat and embedding
- *   models. A reachable server without the models answers every question with
- *   an error, so "up" is not the same as "ready", and the 503 says which.
+ *   models, then asks `/api/show` whether each can do its job. A reachable
+ *   server without the models answers every question with an error, and a
+ *   thinking-only chat build answers every question with its reasoning, so
+ *   "up" is not the same as "ready", and the 503 says which and why.
  */
 import { Inject, Injectable } from '@nestjs/common';
-import { missingModels, type Ollama } from '@rag/llm';
+import { missingModels, modelProblems, type Ollama } from '@rag/llm';
 import type { Health, HealthCheck, ModelStatus } from '@rag/shared';
 import { describeError } from '@rag/shared/server';
 
@@ -73,16 +75,18 @@ export class HealthService {
     }
     const latencyMs = Date.now() - started;
     const missing = missingModels(status);
+    const problems = modelProblems(status);
+    const details = [
+      ...(missing.length === 0
+        ? []
+        : [`not pulled: ${missing.join(', ')} (run scripts/ollama-setup.sh)`]),
+      ...problems,
+    ];
     return [
       { name: 'ollama', status: 'ok', latencyMs, detail: null },
-      missing.length === 0
+      details.length === 0
         ? { name: 'models', status: 'ok', latencyMs: 0, detail: null }
-        : {
-            name: 'models',
-            status: 'fail',
-            latencyMs: 0,
-            detail: `not pulled: ${missing.join(', ')} (run scripts/ollama-setup.sh)`,
-          },
+        : { name: 'models', status: 'fail', latencyMs: 0, detail: details.join('; ') },
     ];
   }
 }
