@@ -52,11 +52,17 @@ RUN apt-get update -qq \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/* \
   && groupadd --gid 1001 app \
-  && useradd --uid 1001 --gid app --shell /usr/sbin/nologin --no-create-home app
+  && useradd --uid 1001 --gid app --shell /usr/sbin/nologin --no-create-home app \
+  && mkdir -p /data/uploads && chown app:app /data/uploads
 WORKDIR /app
 COPY --from=prod-deps --chown=app:app /prod/api ./
 USER app
 ENV NODE_ENV=production
+# Uploads are stored here for the worker to read: the same named volume is
+# mounted in the ingest container. Owned by `app` in the image, so a fresh
+# volume inherits that owner instead of root's.
+ENV UPLOAD_DIR=/data/uploads
+VOLUME ["/data/uploads"]
 EXPOSE 4600
 # The healthcheck hits the same process the routes are on, and /health checks the
 # dependencies for real, so a green container has a live Postgres, Redis and a

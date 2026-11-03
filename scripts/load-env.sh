@@ -31,3 +31,12 @@ load_env_file() {
 
 load_env_file .env
 load_env_file .env.example
+
+# UPLOAD_DIR is shared by the API and the ingest worker, which run from
+# different working directories (apps/api, services/ingest) under turbo. A
+# relative value would name two folders, so it is made absolute here, against
+# the repo root every lane script sources this from. Both services refuse a
+# relative one rather than guess.
+if [[ -n "${UPLOAD_DIR:-}" && "${UPLOAD_DIR}" != /* ]]; then
+  export UPLOAD_DIR="$PWD/${UPLOAD_DIR#./}"
+fi

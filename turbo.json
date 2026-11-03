@@ -25,11 +25,17 @@
     "CHAT_MODEL",
     "DATABASE_URL",
     "EMBED_MODEL",
+    "INGEST_CONCURRENCY",
+    "INGEST_LOCK_MS",
+    "INGEST_PORT",
+    "INGEST_URL",
     "OLLAMA_URL",
     "PORT",
     "RATE_LIMIT_AUTH",
     "RATE_LIMIT_GLOBAL",
+    "RATE_LIMIT_UPLOAD",
     "REDIS_URL",
+    "UPLOAD_DIR",
     "WEB_PORT"
   ],
 

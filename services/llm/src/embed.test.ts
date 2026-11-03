@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { hashEmbedding } from './fake/embedding';
-import { startFakeOllama, type FakeOllama } from './fake/server';
+import { CONTEXT_LENGTH_REFUSAL, startFakeOllama, type FakeOllama } from './fake/server';
 import { createOllama, LlmError } from './ollama';
 
 const EMBED = 'qwen3-embedding:0.6b';
@@ -110,5 +110,56 @@ describe('embed', () => {
     const ollama = createOllama({ baseUrl: 'http://x' });
     const error = await failure(ollama.embed(EMBED, [1 as unknown as string]));
     expect(error.code).toBe('refused');
+  });
+});
+
+describe('the fake’s embed levers', () => {
+  it('answers the next N calls 500 and then recovers', async () => {
+    fake = await startFakeOllama({ models: [EMBED], embed: { failNext: 2 } });
+    const ollama = createOllama({ baseUrl: fake.url });
+    expect((await failure(ollama.embed(EMBED, ['a']))).code).toBe('failed');
+    expect((await failure(ollama.embed(EMBED, ['a']))).code).toBe('failed');
+    expect(await ollama.embed(EMBED, ['a'])).toEqual([hashEmbedding('a')]);
+  });
+
+  it('refuses an input over maxInputChars in Ollama’s words, as a refusal', async () => {
+    fake = await startFakeOllama({ models: [EMBED], embed: { maxInputChars: 3 } });
+    const error = await failure(createOllama({ baseUrl: fake.url }).embed(EMBED, ['abcd']));
+    expect(error.code).toBe('refused');
+    expect(error.message).toContain(CONTEXT_LENGTH_REFUSAL);
+  });
+
+  it('holds each call for delayMs, and PUT /__fake/embed changes it at run time', async () => {
+    fake = await startFakeOllama({ models: [EMBED] });
+    const put = await fetch(`${fake.url}/__fake/embed`, {
+      method: 'PUT',
+      body: JSON.stringify({ delayMs: 150 }),
+    });
+    expect(await put.json()).toEqual({ delayMs: 150, failNext: 0, maxInputChars: null });
+    const started = performance.now();
+    await createOllama({ baseUrl: fake.url }).embed(EMBED, ['a']);
+    expect(performance.now() - started).toBeGreaterThanOrEqual(140);
+    await fetch(`${fake.url}/__fake/embed`, { method: 'DELETE' });
+    const again = performance.now();
+    await createOllama({ baseUrl: fake.url }).embed(EMBED, ['a']);
+    expect(performance.now() - again).toBeLessThan(140);
+  });
+});
+
+describe('checkModel', () => {
+  it('checks one model without needing the other to be pulled', async () => {
+    fake = await startFakeOllama({ models: [EMBED] });
+    const ollama = createOllama({ baseUrl: fake.url });
+    expect(await ollama.checkModel('embed', EMBED)).toEqual({
+      model: EMBED,
+      present: true,
+      problem: null,
+    });
+    expect(await ollama.checkModel('chat', 'qwen3:4b-instruct')).toEqual({
+      model: 'qwen3:4b-instruct',
+      present: false,
+      problem: null,
+    });
+    expect((await ollama.checkModel('chat', EMBED)).problem).not.toBeNull();
   });
 });

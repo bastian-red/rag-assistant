@@ -41,3 +41,6 @@ apps/web/next-env.d.ts
 
 # A red-proofs.mjs backup, present only while a proof runs (or after a killed run).
 *.red-proof-orig
+
+# Local data: uploaded files under pnpm dev.
+.data/

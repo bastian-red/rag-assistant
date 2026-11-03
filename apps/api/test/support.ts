@@ -184,3 +184,55 @@ export function routes(harness: Harness): string[] {
     )
     .sort();
 }
+
+/** Run `body` against a second app booted with `name` set to `value`, then restore. */
+export async function withEnv(
+  name: string,
+  value: string,
+  body: (other: Harness) => Promise<void>,
+): Promise<void> {
+  const saved = process.env[name];
+  process.env[name] = value;
+  let other: Harness;
+  try {
+    other = await boot();
+  } finally {
+    if (saved === undefined) delete process.env[name];
+    else process.env[name] = saved;
+  }
+  try {
+    await body(other);
+  } finally {
+    await other.close();
+  }
+}
+
+/**
+ * `POST /documents` as a browser form sends it: multipart, the collection id
+ * as a field and the file as `file`.
+ */
+export async function upload(
+  harness: Harness,
+  user: SessionUser,
+  form: { collectionId?: string; filename: string; bytes: Uint8Array },
+): Promise<Reply> {
+  const body = new FormData();
+  if (form.collectionId !== undefined) body.set('collectionId', form.collectionId);
+  body.set('file', new Blob([form.bytes]), form.filename);
+  const response = await fetch(`${harness.base}/documents`, {
+    method: 'POST',
+    headers: {
+      'x-forwarded-for': randomAddress(),
+      authorization: `Bearer ${mintServiceToken(user, AUTH_SECRET)}`,
+    },
+    body,
+  });
+  const text = await response.text();
+  let parsed: unknown = undefined;
+  try {
+    parsed = text === '' ? undefined : JSON.parse(text);
+  } catch {
+    parsed = text;
+  }
+  return { status: response.status, body: parsed, headers: response.headers, text };
+}

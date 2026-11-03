@@ -37,7 +37,7 @@ import { readFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { hashPassword } from '@rag/shared/server';
+import { hashPassword, writeStoredFile } from '@rag/shared/server';
 
 import { createPrismaClient, type PrismaClient } from '../src/client.ts';
 
@@ -159,6 +159,9 @@ async function seedLibraries(
       (x) => x.owner === shelf.owner && x.collection === shelf.collection,
     )) {
       const filename = f.file.slice(f.file.lastIndexOf('/') + 1);
+      // The bytes go where an upload's would, so the ingest worker reads a
+      // seeded document exactly as it reads an uploaded one.
+      if (uploadDir !== null) await writeStoredFile(uploadDir, ownerId, f.bytes);
       await prisma.document.upsert({
         where: { ownerId_sha256: { ownerId, sha256: f.sha256 } },
         create: {
@@ -179,13 +182,23 @@ async function seedLibraries(
   return { collections: LIBRARY.length, documents: files.length };
 }
 
+/**
+ * Where the corpus bytes are stored for the worker. Unset means rows only
+ * (the database suite needs no files); set, it must be absolute, the same
+ * rule the API and the worker hold (scripts/load-env.sh resolves `.data/uploads`).
+ */
+const uploadDir =
+  process.env.UPLOAD_DIR === undefined || process.env.UPLOAD_DIR === ''
+    ? null
+    : process.env.UPLOAD_DIR;
+
 const corpus = readCorpus();
 const prisma = createPrismaClient();
 try {
   const people = await seedPeople(prisma);
   const { collections, documents } = await seedLibraries(prisma, corpus);
   console.info(
-    `seed: ${String(people)} people, ${String(collections)} collections, ${String(documents)} documents queued`,
+    `seed: ${String(people)} people, ${String(collections)} collections, ${String(documents)} documents queued${uploadDir === null ? ' (no UPLOAD_DIR: files not stored)' : ''}`,
   );
 } finally {
   await prisma.$disconnect();

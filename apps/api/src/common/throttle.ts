@@ -36,8 +36,11 @@ import type { RequestWithUser } from './session.guard';
 
 export const BUDGET = 'rag:budget';
 
-/** Build step 5 adds `upload`, scoped the same way. */
-export type BudgetName = 'auth';
+/**
+ * `auth`: sign-in, keyed by address. `upload`: `POST /documents`, keyed by
+ * person. Each limits only the routes that name it.
+ */
+export type BudgetName = 'auth' | 'upload';
 
 /** Opt a route into a special budget, on top of the general one. */
 export const Budget = (name: BudgetName): MethodDecorator => SetMetadata(BUDGET, name);
@@ -75,6 +78,12 @@ export function throttlers(config: ApiConfig): ThrottlerOptions[] {
       name: 'auth',
       limit: config.rateLimitAuth,
       skipIf: (context) => budgetOf(context) !== 'auth',
+    },
+    {
+      ...common,
+      name: 'upload',
+      limit: config.rateLimitUpload,
+      skipIf: (context) => budgetOf(context) !== 'upload',
     },
   ];
 }

@@ -155,7 +155,8 @@ describe('full text', () => {
     await db.$executeRaw`
       UPDATE chunks SET text = 'Radiators bleed', char_end = char_start + 15 WHERE id = ${id}`;
     const rows = await db.$queryRaw<{ id: string }[]>`
-      SELECT id FROM chunks WHERE tsv @@ websearch_to_tsquery('english', 'radiator bleeding')`;
+      SELECT id FROM chunks
+      WHERE owner_id = ${alma} AND tsv @@ websearch_to_tsquery('english', 'radiator bleeding')`;
     expect(rows.map((row) => row.id)).toEqual([id]);
   });
 

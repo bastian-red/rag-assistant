@@ -13,6 +13,10 @@ class Probe {
   @Get()
   signIn(): void {}
 
+  @Budget('upload')
+  @Get()
+  upload(): void {}
+
   @Get()
   list(): void {}
 }
@@ -24,10 +28,10 @@ function contextFor(handler: keyof Probe): ExecutionContext {
   } as unknown as ExecutionContext;
 }
 
-const CONFIG = { rateLimitGlobal: 240, rateLimitAuth: 5 } as ApiConfig;
+const CONFIG = { rateLimitGlobal: 240, rateLimitAuth: 5, rateLimitUpload: 10 } as ApiConfig;
 
 describe('throttlers', () => {
-  const [general, auth, ...rest] = throttlers(CONFIG);
+  const [general, auth, upload, ...rest] = throttlers(CONFIG);
 
   it('applies the auth budget to auth routes ONLY', () => {
     // The bug this file exists to prevent: in @nestjs/throttler v6 every named
@@ -35,6 +39,14 @@ describe('throttlers', () => {
     // five-per-minute auth budget would limit every question too.
     expect(auth!.skipIf!(contextFor('signIn'))).toBe(false);
     expect(auth!.skipIf!(contextFor('list'))).toBe(true);
+    expect(auth!.skipIf!(contextFor('upload'))).toBe(true);
+  });
+
+  it('applies the upload budget to the upload route ONLY (SPECS #7)', () => {
+    expect(upload!.limit).toBe(10);
+    expect(upload!.skipIf!(contextFor('upload'))).toBe(false);
+    expect(upload!.skipIf!(contextFor('list'))).toBe(true);
+    expect(upload!.skipIf!(contextFor('signIn'))).toBe(true);
   });
 
   it('registers exactly the budgets it scopes', () => {

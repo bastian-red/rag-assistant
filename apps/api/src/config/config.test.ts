@@ -16,6 +16,9 @@ function env(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
     EMBED_MODEL: 'qwen3-embedding:0.6b',
     RATE_LIMIT_GLOBAL: '240',
     RATE_LIMIT_AUTH: '5',
+    RATE_LIMIT_UPLOAD: '10',
+    UPLOAD_DIR: '/srv/rag/uploads',
+    INGEST_URL: 'http://localhost:4500/',
     ...overrides,
   };
 }
@@ -59,6 +62,21 @@ describe('loadConfig', () => {
   });
 });
 
+describe('the upload settings', () => {
+  it('reads the upload directory and the worker’s URL', () => {
+    const config = loadConfig(env());
+    expect(config.uploadDir).toBe('/srv/rag/uploads');
+    expect(config.ingestUrl).toBe('http://localhost:4500');
+    expect(config.rateLimitUpload).toBe(10);
+  });
+
+  it('refuses a relative upload directory, which would name two folders', () => {
+    expect(() => loadConfig(env({ UPLOAD_DIR: '.data/uploads' }))).toThrow(
+      /UPLOAD_DIR: must be an absolute path/u,
+    );
+  });
+});
+
 describe('assertConsistent', () => {
   it('accepts the documented defaults', () => {
     expect(() => assertConsistent(loadConfig(env()))).not.toThrow();
@@ -69,5 +87,11 @@ describe('assertConsistent', () => {
       /credential-stuffing/u,
     );
     expect(() => assertConsistent(loadConfig(env({ RATE_LIMIT_AUTH: '300' })))).toThrow(BootError);
+  });
+
+  it('refuses an upload budget at or above the global one', () => {
+    expect(() => assertConsistent(loadConfig(env({ RATE_LIMIT_UPLOAD: '240' })))).toThrow(
+      /RATE_LIMIT_UPLOAD \(240\) must be below RATE_LIMIT_GLOBAL \(240\)/u,
+    );
   });
 });

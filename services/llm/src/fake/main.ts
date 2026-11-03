@@ -4,7 +4,8 @@
  *
  *   node services/llm/dist/fake/main.js --port 11535 \
  *     --models qwen3:4b-instruct,qwen3-embedding:0.6b \
- *     [--thinking-only qwen3:4b] [--dimensions 1024] [--token-delay-ms 20]
+ *     [--thinking-only qwen3:4b] [--dimensions 1024] [--token-delay-ms 20] \
+ *     [--embed-delay-ms 300]
  *
  * Arguments, not environment variables, on purpose: this process is started by
  * the test scripts, and every environment name the source reads must be
@@ -42,10 +43,18 @@ function integer(name: string, fallback: number, min: number, max: number): numb
 const port = integer('port', 11435, 1, 65535);
 const dimensions = integer('dimensions', 1024, 1, 16_000);
 const tokenDelayMs = integer('token-delay-ms', 0, 0, 60_000);
+const embedDelayMs = integer('embed-delay-ms', 0, 0, 600_000);
 const models = list(arg('models'));
 const thinkingOnly = list(arg('thinking-only'));
 
-startFakeOllama({ port, models, thinkingOnly, dimensions, script: { tokenDelayMs } })
+startFakeOllama({
+  port,
+  models,
+  thinkingOnly,
+  dimensions,
+  script: { tokenDelayMs },
+  embed: { delayMs: embedDelayMs },
+})
   .then((fake) => {
     console.warn(`[fake-ollama] listening on ${fake.url} with ${models.join(', ') || 'no models'}`);
     const stop = () => {

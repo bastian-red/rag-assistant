@@ -282,6 +282,70 @@ const PROOFS = [
     to: '',
     suite: ['unit', '@rag/llm'],
   },
+  // --- ingestion: one chunk set, refusals not retried, uploads checked ------
+  {
+    name: 'a re-run appends chunks instead of replacing them',
+    file: 'services/ingest/src/store.ts',
+    from: '      await tx.$executeRaw`DELETE FROM "chunks" WHERE "document_id" = ${doc.id}`;\n',
+    to: '',
+    suite: ['integration', 'health'],
+  },
+  {
+    name: 'a PDF with no text layer is read as an empty one',
+    file: 'services/ingest/src/parse.ts',
+    from: "  if (assemblePages(pages).text === '') throw new IngestRefusal(INGEST_FAILURES.noTextLayer);\n",
+    to: '',
+    suite: ['unit', '@rag/ingest'],
+  },
+  {
+    name: 'a refusal is retried like a transient fault',
+    file: 'services/ingest/src/worker.ts',
+    from: '      if (refusal !== null) throw new UnrecoverableError(refusal.reason);\n',
+    to: '',
+    suite: ['integration', 'health'],
+  },
+  {
+    name: 'a killed worker’s job is failed instead of picked up again',
+    file: 'services/ingest/src/worker.ts',
+    from: '    maxStalledCount: 2,\n',
+    to: '    maxStalledCount: 0,\n',
+    suite: ['integration', 'health'],
+  },
+  {
+    name: 'upload budget applied to every route',
+    file: 'apps/api/src/common/throttle.ts',
+    from: "      skipIf: (context) => budgetOf(context) !== 'upload',\n",
+    to: '',
+    suite: ['integration', 'documents'],
+  },
+  {
+    name: 'a .pdf is accepted by its name, not its bytes',
+    file: 'packages/shared/src/server/sniff.ts',
+    from: '    return isPdf(bytes)\n',
+    to: '    return true\n',
+    suite: ['integration', 'documents'],
+  },
+  {
+    name: 'a document is read without the owner filter',
+    file: 'apps/api/src/documents/documents.service.ts',
+    from: '    const row = await this.prisma.client.document.findFirst({\n      where: { id, ownerId },\n      select: DOCUMENT_SELECT,\n',
+    to: '    const row = await this.prisma.client.document.findFirst({\n      where: { id },\n      select: DOCUMENT_SELECT,\n',
+    suite: ['integration', 'documents'],
+  },
+  {
+    name: 'an event stream hears every subscribed channel',
+    file: 'apps/api/src/infra/ingest-events.service.ts',
+    from: '      for (const listener of this.listeners.get(channel)?.set ?? []) listener(parsed.data);\n',
+    to: '      for (const entry of this.listeners.values()) for (const listener of entry.set) listener(parsed.data);\n',
+    suite: ['integration', 'documents'],
+  },
+  {
+    name: 'status leaves the ingest worker out',
+    file: 'apps/api/src/status/status.controller.ts',
+    from: 'services: [api, ingest] };',
+    to: 'services: [api] };',
+    suite: ['integration', 'health'],
+  },
 ];
 
 const filters = process.argv.slice(2);

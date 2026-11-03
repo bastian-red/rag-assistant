@@ -8,10 +8,14 @@
  * the reason it names.
  */
 import { startFakeOllama, type FakeOllama } from '@rag/llm';
-import { healthSchema, statusSchema } from '@rag/shared';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+
+import { healthSchema, statusSchema, type Health } from '@rag/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { boot, call, type Harness } from './support';
+import { INGEST_HEALTH_TIMEOUT_MS } from '../src/status/status.controller';
+import { boot, call, withEnv, type Harness } from './support';
 
 let h: Harness;
 beforeAll(async () => {
@@ -45,6 +49,7 @@ describe('GET /health', () => {
       'redis:ok',
       'ollama:ok',
       'models:ok',
+      'uploads:ok',
     ]);
   });
 
@@ -108,10 +113,55 @@ describe('GET /health', () => {
 });
 
 describe('GET /status', () => {
-  it('reports the api in the shape the /status page parses', async () => {
+  it('reports the api, and an ingest worker that is not running as unreachable', async () => {
+    // integration.sh points INGEST_URL at a port nothing listens on.
     const r = await call(h, 'GET', '/status');
     expect(r.status).toBe(200);
     const body = statusSchema.parse(r.body);
-    expect(body.services.map((s) => s.service)).toEqual(['api']);
+    expect(body.services.map((s) => s.service)).toEqual(['api', 'ingest']);
+    expect(body.services[1]).toMatchObject({ service: 'ingest', status: 'unreachable' });
+    expect((body.services[1] as { detail: string }).detail).toContain(process.env.INGEST_URL!);
+  });
+
+  it('carries the worker’s own report, a degraded one included', async () => {
+    const report: Health = {
+      status: 'degraded',
+      service: 'ingest',
+      version: '0.1.0',
+      uptimeSeconds: 3,
+      checks: [{ name: 'embed-model', status: 'fail', latencyMs: 1, detail: 'not pulled: x' }],
+    };
+    const worker = createServer((_request, response) => {
+      response.writeHead(503, { 'content-type': 'application/json' });
+      response.end(JSON.stringify(report));
+    });
+    await new Promise<void>((resolve) => worker.listen(0, '127.0.0.1', resolve));
+    const { port } = worker.address() as AddressInfo;
+    try {
+      await withEnv('INGEST_URL', `http://127.0.0.1:${String(port)}`, async (other) => {
+        const body = statusSchema.parse((await call(other, 'GET', '/status')).body);
+        expect(body.services[1]).toEqual(report);
+      });
+    } finally {
+      worker.close();
+    }
+  });
+
+  it('reports a worker that hangs as unreachable within its timeout', async () => {
+    const hung = createServer(() => undefined);
+    await new Promise<void>((resolve) => hung.listen(0, '127.0.0.1', resolve));
+    const { port } = hung.address() as AddressInfo;
+    try {
+      await withEnv('INGEST_URL', `http://127.0.0.1:${String(port)}`, async (other) => {
+        const started = Date.now();
+        const body = statusSchema.parse((await call(other, 'GET', '/status')).body);
+        expect(Date.now() - started).toBeLessThan(INGEST_HEALTH_TIMEOUT_MS + 1_000);
+        expect(body.services[1]).toMatchObject({ status: 'unreachable' });
+        expect((body.services[1] as { detail: string }).detail).toMatch(/within 1500 ms/u);
+      });
+    } finally {
+      hung.closeAllConnections();
+      hung.close();
+    }
   });
 });

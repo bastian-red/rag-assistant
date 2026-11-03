@@ -10,9 +10,8 @@
 # no AUTH_SECRET, which died at boot and left every server render failing with
 # ECONNREFUSED. This repo has the wrapper from its first commit.
 #
-# The env-loading block below is deliberately the same shape as the one in
-# scripts/e2e.sh, so the repo has one idiom for this rather than two that can
-# drift apart.
+# The env loading is scripts/load-env.sh, the same file every lane script
+# sources, so the repo has one idiom for this rather than several that drift.
 #
 # Usage: pnpm dev   (package.json points "dev" here)
 set -euo pipefail
@@ -33,10 +32,11 @@ MSG
   exit 1
 fi
 
-set -a
-# shellcheck disable=SC1091
-. ./.env
-set +a
+# .env, then .env.example for any name .env does not set (a .env written
+# before a name existed still starts), and UPLOAD_DIR made absolute: the API
+# and the ingest worker run from different directories under turbo.
+# shellcheck source=scripts/load-env.sh
+. scripts/load-env.sh
 
 # Fail here, naming the variable, rather than 40 lines into a Nest stack trace.
 # Both processes use it -- the web app mints the service token, the API checks
@@ -80,23 +80,23 @@ check_reachable "${REDIS_URL:-}" Redis || failed=1
 pnpm exec turbo run build --filter=@rag/llm --output-logs=errors-only >/dev/null
 node scripts/check-models.mjs || exit 1
 
-# The three ports this starts on must be free. The usual holder is the same
+# The ports this starts on must be free. The usual holder is the same
 # stack in containers (`--profile app`), and compose then cannot bind them
 # either; say which one, and how to stop it, instead of a Next or Nest
 # EADDRINUSE trace halfway through the start.
 port_in_use() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
 busy=()
-for pair in "web:${WEB_PORT:-3600}" "api:${API_PORT:-4600}"; do
+for pair in "web:${WEB_PORT:-3600}" "api:${API_PORT:-4600}" "ingest:${INGEST_PORT:-4500}"; do
   port_in_use "${pair#*:}" && busy+=("${pair%%:*} (port ${pair#*:})")
 done
 if [[ ${#busy[@]} -gt 0 ]]; then
   echo "Already in use: ${busy[*]}." >&2
-  holders="$(docker ps --filter 'name=^rag-(api|web)$' --format '{{.Names}}' 2>/dev/null || true)"
+  holders="$(docker ps --filter 'name=^rag-(api|web|ingest)$' --format '{{.Names}}' 2>/dev/null || true)"
   if [[ -n "$holders" ]]; then
     echo "The containerised stack is running ($(echo "$holders" | tr '\n' ' ')). Stop it first:" >&2
-    echo "  docker compose -f infra/docker-compose.yml --profile app stop api web" >&2
+    echo "  docker compose -f infra/docker-compose.yml --profile app stop api web ingest" >&2
   else
-    echo "Another pnpm dev, or another process, holds them. Find it with: ss -ltnp | grep -E ':(3600|4600)'" >&2
+    echo "Another pnpm dev, or another process, holds them. Find it with: ss -ltnp | grep -E ':(3600|4600|4500)'" >&2
   fi
   exit 1
 fi

@@ -3,7 +3,7 @@
 # you what `pnpm dev` needs and nothing else.
 #
 #   docker compose -f infra/docker-compose.yml up -d                            # postgres + redis
-#   docker compose -f infra/docker-compose.yml --profile app up -d --build      # + api, web
+#   docker compose -f infra/docker-compose.yml --profile app up -d --build      # + api, ingest, web
 #   docker compose -f infra/docker-compose.yml --profile app --profile ollama up -d --build
 #
 # The model server. By default the containers use an Ollama running on the
@@ -55,7 +55,7 @@ services:
     image: redis:7-alpine
     container_name: rag-redis
     restart: unless-stopped
-    # Rate-limit counters today; the ingest queue (BullMQ) from build step 5.
+    # Rate-limit counters, the ingest queue (BullMQ) and its events (pub/sub).
     # Append-only persistence keeps a queued job and a limit across a restart.
     command: ['redis-server', '--appendonly', 'yes', '--appendfsync', 'everysec']
     ports:
@@ -100,7 +100,13 @@ services:
       DATABASE_URL: postgresql://rag:rag@postgres:5432/rag?schema=public
       REDIS_URL: redis://redis:6379
       OLLAMA_URL: ${COMPOSE_OLLAMA_URL:-http://host.docker.internal:11434}
+      # One volume, three containers: the seed and the api write uploads
+      # here, the worker reads them.
+      UPLOAD_DIR: /data/uploads
+      INGEST_URL: http://ingest:4500
     command: ['npm', 'run', '--silent', 'db:setup']
+    volumes:
+      - uploads:/data/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -126,6 +132,31 @@ services:
       - 'host.docker.internal:host-gateway'
     ports:
       - '4600:4600'
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  ingest:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.ingest
+    image: rag-ingest
+    container_name: rag-ingest
+    profiles: ['app']
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      <<: *datastores
+      INGEST_PORT: '4500'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    ports:
+      - '4500:4500'
+    volumes:
+      - uploads:/data/uploads
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -156,3 +187,4 @@ volumes:
   pgdata:
   redisdata:
   ollama:
+  uploads:

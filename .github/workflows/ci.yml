@@ -133,7 +133,7 @@ jobs:
     # this job is that the only configuration reaching the processes is the
     # .env file, through scripts/dev.sh, the way it does on a reader's machine.
     # (The workflow-level env is stripped by dev-smoke.sh's `env -u`.)
-    name: pnpm dev serves api and web
+    name: pnpm dev serves api, ingest and web
     runs-on: ubuntu-24.04
     services:
       postgres: *postgres
@@ -214,12 +214,12 @@ jobs:
           retention-days: 7
 
   images:
-    name: Docker images build (api, web)
+    name: Docker images build (api, ingest, web)
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        service: [api, web]
+        service: [api, ingest, web]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3

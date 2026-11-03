@@ -39,6 +39,15 @@ export function assertConsistent(config: ApiConfig): void {
         'at or above the general one is not a limit.',
     );
   }
+  // An upload is the most expensive call (20 MiB in memory, then a whole
+  // document embedded), so its budget is the tighter one for the same reason.
+  if (config.rateLimitUpload >= config.rateLimitGlobal) {
+    throw new BootError(
+      `RATE_LIMIT_UPLOAD (${String(config.rateLimitUpload)}) must be below RATE_LIMIT_GLOBAL ` +
+        `(${String(config.rateLimitGlobal)}). An upload costs a whole document's embeddings; ` +
+        'a budget at or above the general one is not a limit.',
+    );
+  }
 }
 
 export function assertBootable(config: ApiConfig): void {

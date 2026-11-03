@@ -29,14 +29,16 @@ LOG_DIR="${LOG_DIR:-/tmp/rag-e2e}"
 mkdir -p "$LOG_DIR"
 API_LOG="$LOG_DIR/api.log"
 WEB_LOG="$LOG_DIR/web.log"
+INGEST_LOG="$LOG_DIR/ingest.log"
 FAKE_LOG="$LOG_DIR/fake-ollama.log"
 API_PID=""
 WEB_PID=""
+INGEST_PID=""
 FAKE_PID=""
 WAIT_SECONDS="${WAIT_SECONDS:-90}"
 
 cleanup() {
-  for pid in "$WEB_PID" "$API_PID" "$FAKE_PID"; do
+  for pid in "$WEB_PID" "$API_PID" "$INGEST_PID" "$FAKE_PID"; do
     if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
       kill -- -"$pid" 2>/dev/null || true
       wait "$pid" 2>/dev/null || true
@@ -76,7 +78,8 @@ check_reachable "$REDIS_URL" Redis || failed=1
 
 # Refuse to run against something already listening: the suite would test that
 # instead, with whatever environment and build it happens to have.
-for url in "${API_BASE_URL}/health" "${APP_BASE_URL}/sign-in" "${OLLAMA_URL}/api/version"; do
+INGEST_HEALTH="http://127.0.0.1:${INGEST_PORT:-4500}/health"
+for url in "${API_BASE_URL}/health" "${APP_BASE_URL}/sign-in" "${OLLAMA_URL}/api/version" "$INGEST_HEALTH"; do
   if curl -sf -o /dev/null "$url" 2>/dev/null; then
     echo "Something is already serving ${url}. Stop it first (pnpm dev?)." >&2
     exit 1
@@ -118,11 +121,16 @@ pnpm --filter @rag/db run seed >"$LOG_DIR/seed.log" 2>&1 || {
   exit 1
 }
 
-echo "==> Starting the fake model server, api, web (logs in ${LOG_DIR})"
+echo "==> Starting the fake model server, ingest worker, api, web (logs in ${LOG_DIR})"
 node services/llm/dist/fake/main.js --port "$FAKE_PORT" --models "${CHAT_MODEL},${EMBED_MODEL}" \
   >"$FAKE_LOG" 2>&1 &
 FAKE_PID=$!
 wait_for "${OLLAMA_URL}/api/version" fake-ollama "$FAKE_PID" "$FAKE_LOG"
+# The worker before the API: it re-queues the seeded documents at start
+# (reconcile), and the library specs wait for them to be READY.
+node services/ingest/dist/main.js >"$INGEST_LOG" 2>&1 &
+INGEST_PID=$!
+wait_for "$INGEST_HEALTH" ingest "$INGEST_PID" "$INGEST_LOG"
 node apps/api/dist/main.js >"$API_LOG" 2>&1 &
 API_PID=$!
 wait_for "${API_BASE_URL}/health" api "$API_PID" "$API_LOG"

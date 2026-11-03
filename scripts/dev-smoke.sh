@@ -13,7 +13,8 @@
 #
 # Assert on content, never on a status code. A broken app answers 200 with an
 # error page. So this requires: the api's /health ok (Postgres, Redis, the
-# model server and both models); a sign-in through Auth.js; the library
+# model server and both models, the upload folder); the ingest worker's
+# /health ok (the same, plus its queue consumer); a sign-in through Auth.js; the library
 # rendering the seeded user's name and collections as the API read them
 # from Postgres (GET /auth/me, GET /collections), so the web -> service
 # token -> API -> database path is whole;
@@ -160,9 +161,18 @@ json_field() {
 echo "==> Checking /health reports every dependency ok"
 body="$(curl -s "${API_BASE_URL}/health")"
 [[ "$(json_field status <<<"$body")" == "ok" ]] || die "api /health is not ok: ${body}"
-for check in postgres redis ollama models; do
+for check in postgres redis ollama models uploads; do
   grep -qF "\"name\":\"${check}\",\"status\":\"ok\"" <<<"$body" ||
     die "api /health does not report ${check} ok: ${body}"
+done
+
+echo "==> Checking the ingest worker's /health reports every dependency ok"
+INGEST_HEALTH="http://localhost:${INGEST_PORT:-4500}/health"
+wait_for "$INGEST_HEALTH" ingest
+body="$(curl -s "$INGEST_HEALTH")"
+for check in postgres redis embed-model uploads worker; do
+  grep -qF "\"name\":\"${check}\",\"status\":\"ok\"" <<<"$body" ||
+    die "ingest /health does not report ${check} ok: ${body}"
 done
 
 echo "==> Signing in as ${USER_EMAIL} through Auth.js"
@@ -203,6 +213,8 @@ grep -qF "Every service is up" <<<"$status_page" || {
   tail -60 "$LOG" >&2
   die "/status does not say every service is up."
 }
+grep -qF 'data-service="ingest"' <<<"$status_page" ||
+  die "/status does not list the ingest worker: the API is not asking it (INGEST_URL)."
 
 echo
-echo "PASS: pnpm dev serves api and web, configured by .env alone; /health sees Postgres, Redis and both models; sign-in reaches Postgres through the API."
+echo "PASS: pnpm dev serves api, web and the ingest worker, configured by .env alone; both /health routes see Postgres, Redis, the models and the upload folder; sign-in reaches Postgres through the API; /status lists both services up."

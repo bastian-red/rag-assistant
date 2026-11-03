@@ -27,6 +27,13 @@ export DATABASE_URL="${INTEGRATION_DATABASE_URL:-${BASE_DB/\/rag\?/\/rag_it?}}"
 BASE_REDIS="${REDIS_URL:-redis://localhost:6391}"
 export REDIS_URL="${INTEGRATION_REDIS_URL:-${BASE_REDIS%/}/1}"
 [[ -n "${AUTH_SECRET:-}" ]] || export AUTH_SECRET=integration-auth-secret-0123456789
+# Its own upload folder, fresh per run and removed after, so stored files from
+# one run never satisfy another's reads.
+UPLOAD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/rag-it-uploads.XXXXXX")"
+export UPLOAD_DIR
+# No worker runs during the API suite, and a dev worker on the documented
+# port must not answer for one: /status is asked about a port nothing holds.
+export INGEST_URL="http://127.0.0.1:${INTEGRATION_INGEST_PORT:-4590}"
 
 [[ "$DATABASE_URL" != "$BASE_DB" ]] ||
   { echo "integration: refusing to run against the dev database (${BASE_DB%%\?*})." >&2; exit 1; }
@@ -44,7 +51,7 @@ export EMBED_MODEL="${EMBED_MODEL:-qwen3-embedding:0.6b}"
 export OLLAMA_URL="http://127.0.0.1:${FAKE_PORT}"
 node services/llm/dist/fake/main.js --port "$FAKE_PORT" --models "${CHAT_MODEL},${EMBED_MODEL}" &
 FAKE_PID=$!
-trap 'kill "$FAKE_PID" 2>/dev/null || true' EXIT
+trap 'kill "$FAKE_PID" 2>/dev/null || true; rm -rf -- "$UPLOAD_DIR"' EXIT
 for _ in $(seq 1 50); do
   (exec 3<>"/dev/tcp/127.0.0.1/${FAKE_PORT}") 2>/dev/null && break
   sleep 0.1
@@ -91,6 +98,11 @@ echo "integration: database guarantees"
 before=$(count_users)
 pnpm --filter @rag/db exec vitest run --config vitest.integration.config.ts
 leftovers database "$before" "$(count_users)"
+
+echo "integration: ingest worker"
+before=$(count_users)
+pnpm --filter @rag/ingest exec vitest run --config vitest.integration.config.ts
+leftovers ingest "$before" "$(count_users)"
 
 echo "integration: API"
 before=$(count_users)

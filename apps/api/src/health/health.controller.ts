@@ -28,7 +28,7 @@ export class HealthController {
    * runtime restarts a perfectly healthy process.
    */
   @Public()
-  @SkipThrottle({ default: true, auth: true })
+  @SkipThrottle({ default: true, auth: true, upload: true })
   @Get()
   async check(@Res() response: Response): Promise<void> {
     const body = await this.health.report();

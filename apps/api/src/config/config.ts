@@ -18,6 +18,8 @@
  * `PORT` before `API_PORT`, matching what every container runtime injects. `.env.example` ships `PORT` empty because a
  * host running `pnpm dev` needs the two services on different ports.
  */
+import { isAbsolute } from 'node:path';
+
 import { modelRefSchema } from '@rag/shared';
 import { z } from 'zod';
 
@@ -60,6 +62,12 @@ export interface ApiConfig {
   embedModel: string;
   rateLimitGlobal: number;
   rateLimitAuth: number;
+  /** Uploads per minute per person, on top of the general budget. */
+  rateLimitUpload: number;
+  /** Absolute. Uploads are stored at `<uploadDir>/<ownerId>/<sha256>`, which the worker reads. */
+  uploadDir: string;
+  /** The ingest worker's health server, which `GET /status` asks. */
+  ingestUrl: string;
 }
 
 export class ConfigError extends Error {
@@ -82,6 +90,9 @@ const ENV_NAMES: Record<string, string> = {
   embedModel: 'EMBED_MODEL',
   rateLimitGlobal: 'RATE_LIMIT_GLOBAL',
   rateLimitAuth: 'RATE_LIMIT_AUTH',
+  rateLimitUpload: 'RATE_LIMIT_UPLOAD',
+  uploadDir: 'UPLOAD_DIR',
+  ingestUrl: 'INGEST_URL',
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
@@ -105,6 +116,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     embedModel: modelRefSchema,
     rateLimitGlobal: positiveInt,
     rateLimitAuth: positiveInt,
+    rateLimitUpload: positiveInt,
+    // Absolute: this process and the worker run from different directories,
+    // so a relative path would name two folders (scripts/load-env.sh resolves
+    // the documented `.data/uploads` against the repo root).
+    uploadDir: z
+      .string()
+      .trim()
+      .min(1)
+      .refine(isAbsolute, 'must be an absolute path (scripts/load-env.sh resolves a relative one)'),
+    ingestUrl: httpUrl.transform((v) => v.replace(/\/+$/u, '')),
   });
 
   const parsed = schema.safeParse({
@@ -119,6 +140,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     embedModel: env.EMBED_MODEL,
     rateLimitGlobal: env.RATE_LIMIT_GLOBAL,
     rateLimitAuth: env.RATE_LIMIT_AUTH,
+    rateLimitUpload: env.RATE_LIMIT_UPLOAD,
+    uploadDir: env.UPLOAD_DIR,
+    ingestUrl: env.INGEST_URL,
   });
 
   if (!parsed.success) {

@@ -27,6 +27,9 @@
  *
  * - `PUT /__fake/models` `{models, thinkingOnly?}`: what is pulled
  * - `PUT /__fake/chat` (a partial `FakeChatScript`), `DELETE /__fake/chat`: how it answers
+ * - `PUT /__fake/embed` (a partial `FakeEmbedScript`), `DELETE /__fake/embed`: how embeddings
+ *   answer (a delay per call so a test can kill a worker mid-embed, injected failures, Ollama's
+ *   context-length refusal)
  * - `GET /__fake/log`: requests, chats and embeds; `DELETE /__fake/log` clears it
  */
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -66,6 +69,33 @@ const DEFAULT_SCRIPT: FakeChatScript = {
   stallAfter: null,
   failAfter: null,
 };
+
+/**
+ * How `/api/embed` behaves. Every field is a test's lever on the ingest worker:
+ * `delayMs` holds each call open long enough to kill the worker mid-embed,
+ * `failNext` answers the next N calls 500 (a transient fault the worker must
+ * retry), and `maxInputChars` refuses an input over it with Ollama's own 400
+ * for `truncate: false` (a permanent fault it must not retry).
+ */
+export interface FakeEmbedScript {
+  readonly delayMs: number;
+  readonly failNext: number;
+  readonly maxInputChars: number | null;
+}
+
+const DEFAULT_EMBED: FakeEmbedScript = { delayMs: 0, failNext: 0, maxInputChars: null };
+
+/** Ollama's words when an input is over the context and `truncate` is false. */
+export const CONTEXT_LENGTH_REFUSAL = 'the input length exceeds the context length';
+
+const embedScriptSchema = z
+  .object({
+    delayMs: z.number().int().min(0).max(600_000),
+    failNext: z.number().int().min(0).max(1000),
+    maxInputChars: z.number().int().positive().nullable(),
+  })
+  .strict()
+  .partial();
 
 const scriptSchema = z
   .object({
@@ -126,6 +156,7 @@ export interface FakeOllamaOptions {
   /** Embedding dimensions. Default 1024. */
   readonly dimensions?: number;
   readonly script?: Partial<FakeChatScript>;
+  readonly embed?: Partial<FakeEmbedScript>;
 }
 
 export interface FakeOllama {
@@ -135,6 +166,8 @@ export interface FakeOllama {
   readonly embeds: readonly FakeEmbedRecord[];
   /** The in-process form of `PUT /__fake/models`. */
   setModels(models: readonly string[], thinkingOnly?: readonly string[]): void;
+  /** The in-process form of `PUT /__fake/embed`; `null` resets to the defaults. */
+  setEmbed(next: Partial<FakeEmbedScript> | null): void;
   /** The in-process form of `PUT /__fake/chat`; `null` resets to the defaults. */
   setScript(script: Partial<FakeChatScript> | null): void;
   close(): Promise<void>;
@@ -153,6 +186,11 @@ export async function startFakeOllama(options: FakeOllamaOptions): Promise<FakeO
   let models: readonly string[] = [...options.models];
   let thinkingOnly = new Set((options.thinkingOnly ?? []).map(normaliseModel));
   let script: FakeChatScript = { ...DEFAULT_SCRIPT, ...options.script };
+  let embedScript: FakeEmbedScript = { ...DEFAULT_EMBED, ...options.embed };
+  const setEmbed = (next: Partial<FakeEmbedScript> | null) => {
+    embedScript =
+      next === null ? { ...DEFAULT_EMBED, ...options.embed } : { ...embedScript, ...next };
+  };
   const open = new Set<ServerResponse>();
 
   const pulled = (model: string) => models.some((m) => normaliseModel(m) === normaliseModel(model));
@@ -228,6 +266,16 @@ export async function startFakeOllama(options: FakeOllamaOptions): Promise<FakeO
           );
         }
         const input = typeof body.data.input === 'string' ? [body.data.input] : body.data.input;
+        const plan = embedScript;
+        await sleep(plan.delayMs);
+        if (plan.failNext > 0) {
+          embedScript = { ...embedScript, failNext: embedScript.failNext - 1 };
+          return error(500, 'fake: injected embedding failure');
+        }
+        const limit = plan.maxInputChars;
+        if (body.data.truncate === false && limit !== null && input.some((t) => t.length > limit)) {
+          return error(400, CONTEXT_LENGTH_REFUSAL);
+        }
         embeds.push({ model, inputs: input.length });
         return json(200, {
           model,
@@ -254,6 +302,17 @@ export async function startFakeOllama(options: FakeOllamaOptions): Promise<FakeO
       if (method === 'DELETE' && path === '/__fake/chat') {
         script = { ...DEFAULT_SCRIPT, ...options.script };
         return json(200, script);
+      }
+      if (method === 'PUT' && path === '/__fake/embed') {
+        const body = embedScriptSchema.safeParse(await readJsonQuiet(request));
+        if (!body.success)
+          return error(400, `not an embed script: ${body.error.issues[0]?.message ?? ''}`);
+        setEmbed(body.data);
+        return json(200, embedScript);
+      }
+      if (method === 'DELETE' && path === '/__fake/embed') {
+        setEmbed(null);
+        return json(200, embedScript);
       }
       if (method === 'GET' && path === '/__fake/log') return json(200, { requests, chats, embeds });
       if (method === 'DELETE' && path === '/__fake/log') {
@@ -380,6 +439,7 @@ export async function startFakeOllama(options: FakeOllamaOptions): Promise<FakeO
     chats,
     embeds,
     setModels,
+    setEmbed,
     setScript: (next) => {
       script = next === null ? { ...DEFAULT_SCRIPT, ...options.script } : { ...script, ...next };
     },

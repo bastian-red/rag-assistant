@@ -1,0 +1,33 @@
+{
+  "name": "@rag/ingest",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The ingest worker: takes a stored upload off the BullMQ queue, parses it (unpdf for PDF, keeping pages), chunks it, embeds it through @rag/llm and replaces its chunks in one transaction, announcing every move on Redis.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
+  },
+  "dependencies": {
+    "@rag/chunker": "workspace:*",
+    "@rag/db": "workspace:*",
+    "@rag/llm": "workspace:*",
+    "@rag/shared": "workspace:*",
+    "bullmq": "6.5.4",
+    "ioredis": "^5.4.2",
+    "unpdf": "1.7.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@rag/config": "workspace:*",
+    "@types/node": "^20.17.6",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}

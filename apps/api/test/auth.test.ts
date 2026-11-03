@@ -89,11 +89,20 @@ describe('the session guard is default-closed', () => {
     // Read from the running router. A route added without a row here fails
     // this test, which is the moment to decide whether it is public.
     expect(routes(h)).toEqual([
+      'DELETE /collections/:id',
+      'DELETE /documents/:id',
       'GET /auth/me',
       'GET /collections',
+      'GET /documents',
+      'GET /documents/:id',
+      'GET /documents/:id/chunks/:chunkId',
+      'GET /documents/:id/file',
+      'GET /documents/events',
       'GET /health',
       'GET /status',
       'POST /auth/sign-in',
+      'POST /collections',
+      'POST /documents',
     ]);
   });
 });

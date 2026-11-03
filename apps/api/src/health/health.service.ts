@@ -15,11 +15,13 @@
  *   server without the models answers every question with an error, and a
  *   thinking-only chat build answers every question with its reasoning, so
  *   "up" is not the same as "ready", and the 503 says which and why.
+ * - **uploads** writes and removes a probe file in UPLOAD_DIR, where every
+ *   upload is stored for the worker to read.
  */
 import { Inject, Injectable } from '@nestjs/common';
 import { missingModels, modelProblems, type Ollama } from '@rag/llm';
 import type { Health, HealthCheck, ModelStatus } from '@rag/shared';
-import { describeError } from '@rag/shared/server';
+import { describeError, probeUploadDir } from '@rag/shared/server';
 
 import { API_CONFIG, type ApiConfig } from '../config/config';
 import { OLLAMA } from '../infra/infra.module';
@@ -38,7 +40,7 @@ export class HealthService {
   ) {}
 
   async report(): Promise<Health> {
-    const [postgres, redis, model] = await Promise.all([
+    const [postgres, redis, model, uploads] = await Promise.all([
       timed('postgres', async () => {
         await this.prisma.ping();
       }),
@@ -46,8 +48,9 @@ export class HealthService {
         await this.redis.client.ping();
       }),
       this.modelChecks(),
+      timed('uploads', () => probeUploadDir(this.config.uploadDir)),
     ]);
-    const checks = [postgres, redis, ...model];
+    const checks = [postgres, redis, ...model, uploads];
     return {
       status: checks.every((check) => check.status === 'ok') ? 'ok' : 'degraded',
       service: 'api',

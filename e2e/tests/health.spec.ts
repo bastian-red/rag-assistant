@@ -7,7 +7,14 @@
  * it fail for the reason it names. Serial, because the other tests here read
  * the healthy state.
  */
-import { API_BASE_URL, FAKE_OLLAMA_URL, MODELS, expect, test } from '../fixtures';
+import {
+  API_BASE_URL,
+  FAKE_OLLAMA_URL,
+  INGEST_HEALTH_URL,
+  MODELS,
+  expect,
+  test,
+} from '../fixtures';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -35,16 +42,40 @@ test('the api checks Postgres, Redis, the model server and both models', async (
     'redis:ok',
     'ollama:ok',
     'models:ok',
+    'uploads:ok',
   ]);
 });
 
-test('the /status page shows the api up, with every check', async ({ page }) => {
+test('the ingest worker checks its own dependencies, the embedding model only', async ({
+  request,
+}) => {
+  const response = await request.get(INGEST_HEALTH_URL);
+  expect(response.status()).toBe(200);
+  const body = (await response.json()) as HealthBody;
+  expect(body.service).toBe('ingest');
+  expect(body.checks.map((c) => `${c.name}:${c.status}`)).toEqual([
+    'postgres:ok',
+    'redis:ok',
+    'embed-model:ok',
+    'uploads:ok',
+    'worker:ok',
+  ]);
+});
+
+test('the /status page shows the api and the ingest worker up, with every check', async ({
+  page,
+}) => {
   await page.goto('/status');
   await expect(page.getByTestId('overall')).toHaveText(/Every service is up/u);
   const card = page.locator('[data-service="api"]');
   await expect(card).toContainText('Up');
-  for (const check of ['postgres', 'redis', 'ollama', 'models']) {
+  for (const check of ['postgres', 'redis', 'ollama', 'models', 'uploads']) {
     await expect(card).toContainText(check);
+  }
+  const worker = page.locator('[data-service="ingest"]');
+  await expect(worker).toContainText('Up');
+  for (const check of ['embed-model', 'uploads', 'worker']) {
+    await expect(worker).toContainText(check);
   }
 });
 
@@ -61,9 +92,14 @@ test('a missing model is a 503 that names it, and the status page says so in wor
     expect(models?.status).toBe('fail');
     expect(models?.detail).toContain(MODELS.embed);
 
+    // The worker needs the embedding model too, and says so on its own card.
+    const worker = await request.get(INGEST_HEALTH_URL);
+    expect(worker.status()).toBe(503);
+
     await page.goto('/status');
     await expect(page.getByTestId('overall')).toHaveText(/Something is degraded/u);
     await expect(page.locator('[data-service="api"]')).toContainText(MODELS.embed);
+    await expect(page.locator('[data-service="ingest"]')).toContainText(MODELS.embed);
   } finally {
     await setFakeModels([MODELS.chat, MODELS.embed]);
   }

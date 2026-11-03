@@ -11,3 +11,6 @@ export * from './service-token';
 export * from './connection-log';
 
 export * from './address';
+
+export * from './storage';
+export * from './sniff';

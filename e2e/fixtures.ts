@@ -36,6 +36,8 @@ export type Person = keyof typeof PEOPLE;
 export const API_BASE_URL = process.env.API_BASE_URL ?? 'http://localhost:4600';
 
 /** The fake model server e2e.sh starts (its control route lets a spec remove a model). */
+/** The worker's health server, which e2e.sh starts on INGEST_PORT. */
+export const INGEST_HEALTH_URL = `http://127.0.0.1:${process.env.INGEST_PORT ?? '4500'}/health`;
 export const FAKE_OLLAMA_URL = `http://127.0.0.1:${process.env.E2E_FAKE_OLLAMA_PORT ?? '11536'}`;
 export const MODELS = {
   chat: process.env.CHAT_MODEL ?? 'qwen3:4b-instruct',

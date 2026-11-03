@@ -11,18 +11,25 @@ for (const who of Object.keys(PEOPLE) as Person[]) {
 
 test('each person sees their own collections, and none of the other person’s', async ({ page }) => {
   // The seed gives Alma "Home" (2 documents) and "Bike" (1), and Bruno "Lab"
-  // (2). All five are queued until the ingest worker reads them (step 5).
+  // (2), and stores their files where an upload's go. The ingest worker
+  // e2e.sh started reads all five, so the counts end "ready to ask about":
+  // seed -> stored file -> queue -> worker -> chunks -> API -> page.
   await signIn(page, 'alma');
   const shelves = page.getByTestId('collection');
   await expect(shelves.getByRole('heading')).toHaveText(['Bike', 'Home']);
-  await expect(shelves.filter({ hasText: 'Home' })).toContainText(
-    '2 documents: 2 still being read',
-  );
+  await expect(async () => {
+    await page.reload();
+    await expect(shelves.filter({ hasText: 'Home' })).toContainText(
+      '2 documents: 2 ready to ask about',
+      { timeout: 1_000 },
+    );
+  }).toPass({ timeout: 30_000 });
   await expect(page.getByTestId('collections')).not.toContainText('Lab');
 
   await signOut(page);
   await signIn(page, 'bruno');
   await expect(shelves.getByRole('heading')).toHaveText(['Lab']);
+  await expect(shelves.filter({ hasText: 'Lab' })).toContainText('2 ready to ask about');
 });
 
 test('a wrong password is one answer, whatever was wrong', async ({ page }) => {

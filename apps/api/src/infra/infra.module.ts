@@ -1,6 +1,6 @@
 /**
- * What every feature module needs: the config, Postgres, Redis and the model
- * server client.
+ * What every feature module needs: the config, Postgres, Redis, the model
+ * server client, and the ingest queue and its event stream.
  *
  * `@Global()`, which this codebase otherwise avoids. The justification is narrow
  * and worth stating: these are process-level singletons with a lifecycle, and the
@@ -13,6 +13,8 @@ import { Global, Module } from '@nestjs/common';
 import { createOllama, type Ollama } from '@rag/llm';
 
 import { API_CONFIG, loadConfig, type ApiConfig } from '../config/config';
+import { IngestEventsService } from './ingest-events.service';
+import { IngestQueueService } from './ingest-queue.service';
 import { PrismaService } from './prisma.service';
 import { RedisService } from './redis.service';
 
@@ -36,7 +38,16 @@ export const OLLAMA = 'OLLAMA';
     },
     PrismaService,
     RedisService,
+    IngestQueueService,
+    IngestEventsService,
   ],
-  exports: [API_CONFIG, OLLAMA, PrismaService, RedisService],
+  exports: [
+    API_CONFIG,
+    OLLAMA,
+    PrismaService,
+    RedisService,
+    IngestQueueService,
+    IngestEventsService,
+  ],
 })
 export class InfraModule {}

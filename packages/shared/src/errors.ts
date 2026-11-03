@@ -17,6 +17,7 @@ export const ERROR_CODES = [
   'TOO_LARGE',
   'GONE',
   'UNPROCESSABLE',
+  'UNSUPPORTED',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -77,6 +78,9 @@ export const HTTP_STATUS: Readonly<Record<ErrorCode, number>> = Object.freeze({
   TOO_LARGE: 413,
   GONE: 410,
   UNPROCESSABLE: 422,
+  // A file whose bytes are not what its name claims (a `.pdf` that is not a
+  // PDF), or a kind of file this product does not read.
+  UNSUPPORTED: 415,
 });
 
 /** The status for a code, or 500 for a string that is not one. */

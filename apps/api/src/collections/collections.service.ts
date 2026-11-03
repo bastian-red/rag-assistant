@@ -7,7 +7,14 @@
  * appear, whatever they are called.
  */
 import { Injectable } from '@nestjs/common';
-import { countDocuments, type CollectionList, type DocumentStatus } from '@rag/shared';
+import { COLLECTION_NAME_UNIQUE, violatedUniqueIndex } from '@rag/db';
+import {
+  DomainError,
+  countDocuments,
+  type CollectionList,
+  type CollectionSummary,
+  type DocumentStatus,
+} from '@rag/shared';
 
 import { PrismaService } from '../infra/prisma.service';
 
@@ -41,5 +48,25 @@ export class CollectionsService {
         documents: countDocuments(byCollection.get(c.id) ?? {}),
       })),
     };
+  }
+
+  async create(ownerId: string, name: string): Promise<CollectionSummary> {
+    try {
+      const row = await this.prisma.client.collection.create({
+        data: { ownerId, name },
+        select: { id: true, name: true },
+      });
+      return { ...row, documents: countDocuments({}) };
+    } catch (error) {
+      if (violatedUniqueIndex(error, COLLECTION_NAME_UNIQUE)) {
+        throw new DomainError('CONFLICT', `You already have a collection called “${name}”.`);
+      }
+      throw error;
+    }
+  }
+
+  async assertOwned(ownerId: string, id: string): Promise<void> {
+    const owned = await this.prisma.client.collection.count({ where: { id, ownerId } });
+    if (owned === 0) throw new DomainError('NOT_FOUND', 'No such collection.');
   }
 }

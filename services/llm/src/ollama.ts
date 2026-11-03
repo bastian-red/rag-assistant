@@ -98,6 +98,8 @@ export interface Ollama {
   listModels(): Promise<string[]>;
   /** Pulled, and able to do its job, for both models. Throws `OllamaUnreachable`. */
   checkModels(models: { chat: string; embed: string }): Promise<ModelStatus>;
+  /** One model only: the ingest worker never needs the chat model to be pulled. */
+  checkModel(role: 'chat' | 'embed', model: string): Promise<ModelCheck>;
   chat(
     model: string,
     messages: readonly ChatMessage[],
@@ -390,7 +392,11 @@ export function createOllama(options: OllamaOptions): Ollama {
     return out;
   }
 
-  return { listModels, checkModels, chat, embed };
+  async function checkModel(role: 'chat' | 'embed', model: string): Promise<ModelCheck> {
+    return check(role, model, new Set(await listModels()));
+  }
+
+  return { listModels, checkModels, checkModel, chat, embed };
 }
 
 /** The models a status says are missing, by the names the operator configured. */
