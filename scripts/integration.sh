@@ -4,7 +4,11 @@
 # that speaks Ollama's HTTP, every service's integration suite.
 #
 #   ./scripts/integration.sh              # everything
-#   ./scripts/integration.sh auth         # the database suite, then API files matching "auth"
+#   ./scripts/integration.sh auth         # every phase, the API's files matching "auth"
+#   INTEGRATION_ONLY=retrieval ./scripts/integration.sh   # set-up, then that phase alone
+#
+# Phases, in order: db, ingest, retrieval, bench, api. scripts/red-proofs.mjs
+# runs one phase per proof, so a proof costs that suite and not the bench.
 #
 # Its own database (rag_it) and Redis database (1), so it never touches what
 # `pnpm dev` is using. Every budget is the DOCUMENTED one from .env.example:
@@ -19,6 +23,13 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+
+ONLY="${INTEGRATION_ONLY:-}"
+case "$ONLY" in
+  '' | db | ingest | retrieval | bench | api) ;;
+  *) echo "integration: INTEGRATION_ONLY must be db, ingest, retrieval, bench or api, not '$ONLY'" >&2; exit 2 ;;
+esac
+phase() { [[ -z "$ONLY" || "$ONLY" == "$1" ]]; }
 # shellcheck source=scripts/load-env.sh
 . scripts/load-env.sh
 
@@ -94,22 +105,42 @@ leftovers() { # phase before after
 echo "integration: seed"
 pnpm --filter @rag/db exec tsx prisma/seed.mts >/dev/null
 
-echo "integration: database guarantees"
-before=$(count_users)
-pnpm --filter @rag/db exec vitest run --config vitest.integration.config.ts
-leftovers database "$before" "$(count_users)"
-
-echo "integration: ingest worker"
-before=$(count_users)
-pnpm --filter @rag/ingest exec vitest run --config vitest.integration.config.ts
-leftovers ingest "$before" "$(count_users)"
-
-echo "integration: API"
-before=$(count_users)
-if [[ $# -gt 0 ]]; then
-  pnpm --filter @rag/api exec vitest run --config vitest.integration.config.ts "$@"
-else
-  pnpm --filter @rag/api exec vitest run --config vitest.integration.config.ts
+if phase db; then
+  echo "integration: database guarantees"
+  before=$(count_users)
+  pnpm --filter @rag/db exec vitest run --config vitest.integration.config.ts
+  leftovers database "$before" "$(count_users)"
 fi
-leftovers API "$before" "$(count_users)"
+
+if phase ingest; then
+  echo "integration: ingest worker"
+  before=$(count_users)
+  pnpm --filter @rag/ingest exec vitest run --config vitest.integration.config.ts
+  leftovers ingest "$before" "$(count_users)"
+fi
+
+if phase retrieval; then
+  echo "integration: retrieval"
+  before=$(count_users)
+  pnpm --filter @rag/retrieval exec vitest run --config vitest.integration.config.ts
+  leftovers retrieval "$before" "$(count_users)"
+fi
+
+if phase bench; then
+  echo "integration: retrieval bench (SPECS #8: p95 < 150 ms over 5,000 chunks)"
+  before=$(count_users)
+  node scripts/retrieval-bench.mjs
+  leftovers bench "$before" "$(count_users)"
+fi
+
+if phase api; then
+  echo "integration: API"
+  before=$(count_users)
+  if [[ $# -gt 0 ]]; then
+    pnpm --filter @rag/api exec vitest run --config vitest.integration.config.ts "$@"
+  else
+    pnpm --filter @rag/api exec vitest run --config vitest.integration.config.ts
+  fi
+  leftovers API "$before" "$(count_users)"
+fi
 echo "integration: no users left behind ($before)"

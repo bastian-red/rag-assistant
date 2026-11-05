@@ -35,7 +35,7 @@ export async function startIngest(
   const deps = {
     prisma,
     embed: (texts: readonly string[]) => ollama.embed(config.embedModel, texts),
-    embedModel: config.embedModel,
+    embeddingSpace: () => ollama.embeddingSpace(config.embedModel),
     uploadDir: config.uploadDir,
     publish,
   };
@@ -46,8 +46,30 @@ export async function startIngest(
     log,
   });
   const queue = new Queue(INGEST_QUEUE, { connection: queueConnection });
-  const queued = await reconcile(prisma, queue);
-  if (queued > 0) log(`[ingest] queued ${String(queued)} unfinished document(s) found at start`);
+  const sweep = async (when: string) => {
+    // The space is read from the model server; when it is down, the stale
+    // pass waits for the next sweep rather than guessing.
+    const space = await ollama.embeddingSpace(config.embedModel).catch(() => null);
+    const found = await reconcile(prisma, queue, space);
+    if (found.unfinished > 0) {
+      log(`[ingest] queued ${String(found.unfinished)} unfinished document(s) found ${when}`);
+    }
+    if (found.stale === null) {
+      log(`[ingest] could not read the embedding space ${when}; stale chunks not checked`);
+    } else if (found.stale > 0) {
+      log(
+        `[ingest] queued ${String(found.stale)} document(s) embedded in another space than ${space ?? ''}, found ${when}`,
+      );
+    }
+  };
+  await sweep('at start');
+  let sweeping: Promise<void> = Promise.resolve();
+  const timer = setInterval(() => {
+    sweeping = sweep('on the periodic sweep').catch((error: unknown) => {
+      log(`[ingest] periodic sweep failed: ${error instanceof Error ? error.name : 'error'}`);
+    });
+  }, config.sweepMs);
+  timer.unref();
 
   const server = await startHealthServer(
     healthReporter({
@@ -70,6 +92,8 @@ export async function startIngest(
   return {
     port,
     close: async () => {
+      clearInterval(timer);
+      await sweeping;
       // The consumer first, so no job starts on connections about to close.
       await worker.close();
       await queue.close();

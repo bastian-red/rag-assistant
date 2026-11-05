@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   chatEventSchema,
   chatMessageSchema,
+  embeddingSpace,
+  embeddingSpaceSchema,
   modelRefSchema,
   modelStatusSchema,
   normaliseModel,
@@ -75,5 +77,35 @@ describe('the chat contract', () => {
     expect(
       modelStatusSchema.safeParse({ chat: { model: 'x', present: true }, embed: check }).success,
     ).toBe(false);
+  });
+});
+
+describe('embeddingSpace', () => {
+  const DIGEST = 'ac6da0dfba84a81fdbfbaf330198c33cd77c4cdfc53e8bc50eb581914a15621d';
+
+  it('is the normalised name and the first 12 digest digits, as `ollama list` prints them', () => {
+    expect(embeddingSpace('qwen3-embedding:0.6b', DIGEST)).toBe(
+      'qwen3-embedding:0.6b@ac6da0dfba84',
+    );
+    expect(embeddingSpace('Nomic-Embed-Text', `sha256:${DIGEST.toUpperCase()}`)).toBe(
+      'nomic-embed-text:latest@ac6da0dfba84',
+    );
+  });
+
+  it('tells two servers apart that answer to one name with different weights', () => {
+    const other = `ff${DIGEST.slice(2)}`;
+    expect(embeddingSpace('qwen3-embedding:0.6b', DIGEST)).not.toBe(
+      embeddingSpace('qwen3-embedding:0.6b', other),
+    );
+  });
+
+  it('refuses a digest that is not hex (the fake once answered "fake")', () => {
+    expect(() => embeddingSpace('qwen3-embedding:0.6b', 'fake')).toThrow(RangeError);
+    expect(() => embeddingSpace('qwen3-embedding:0.6b', '')).toThrow(RangeError);
+  });
+
+  it('is what embeddingSpaceSchema accepts, and a bare name is not', () => {
+    expect(embeddingSpaceSchema.safeParse(embeddingSpace('qwen3:4b', DIGEST)).success).toBe(true);
+    expect(embeddingSpaceSchema.safeParse('qwen3-embedding:0.6b').success).toBe(false);
   });
 });

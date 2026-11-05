@@ -9,7 +9,14 @@
  * cosine; texts sharing none sit near zero. A text with no words gets a fixed
  * unit vector rather than zeros: cosine against a zero vector is undefined,
  * and pgvector answers NaN.
+ *
+ * A query written in Qwen3-Embedding's instruction format
+ * (`Instruct: <task>\nQuery: <query>`) is embedded as its query alone. The
+ * real model is trained to read the instruction as a task, not as content;
+ * hashing its words would make every question look alike to the fake.
  */
+const INSTRUCTION = /^Instruct: [^\n]*\nQuery: /u;
+
 function fnv1a(text: string, seed = 0x811c9dc5): number {
   let hash = seed;
   for (let i = 0; i < text.length; i += 1) {
@@ -26,7 +33,7 @@ export function hashEmbedding(text: string, dimensions = 1024): number[] {
     throw new RangeError(`dimensions must be a positive integer, got ${String(dimensions)}`);
   }
   const vector = new Array<number>(dimensions).fill(0);
-  const words = text.normalize('NFC').toLowerCase().match(WORD) ?? [];
+  const words = text.replace(INSTRUCTION, '').normalize('NFC').toLowerCase().match(WORD) ?? [];
   const add = (feature: string, weight: number) => {
     const sign = (fnv1a(feature, 0x01000193) & 1) === 0 ? 1 : -1;
     vector[fnv1a(feature) % dimensions]! += sign * weight;

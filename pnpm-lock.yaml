@@ -353,6 +353,43 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@20.19.43)(terser@5.51.2)
 
+  services/retrieval:
+    dependencies:
+      '@rag/chunker':
+        specifier: workspace:*
+        version: link:../../packages/chunker
+      '@rag/citations':
+        specifier: workspace:*
+        version: link:../../packages/citations
+      '@rag/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@rag/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@rag/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@rag/llm':
+        specifier: workspace:*
+        version: link:../llm
+      '@types/node':
+        specifier: ^20.17.6
+        version: 20.19.43
+      fast-check:
+        specifier: ^3.23.2
+        version: 3.23.2
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@20.19.43)(terser@5.51.2)
+
 packages:
 
   '@angular-devkit/core@19.2.24':

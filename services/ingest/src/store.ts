@@ -81,6 +81,7 @@ export async function replaceChunks(
   doc: StoredDocument,
   chunks: readonly Chunk[],
   vectors: readonly (readonly number[])[],
+  /** `embeddingSpace(...)`, stored in `chunks.embedding_model`. */
   embeddingModel: string,
   pages: number | null,
 ): Promise<boolean> {
@@ -153,4 +154,20 @@ export async function unfinishedDocuments(
     select: { id: true, ownerId: true, sha256: true },
     orderBy: { createdAt: 'asc' },
   });
+}
+
+/** READY documents holding any chunk embedded in a space other than `space`. */
+export async function staleDocuments(
+  prisma: PrismaClient,
+  space: string,
+): Promise<{ id: string; ownerId: string; sha256: string }[]> {
+  return prisma.$queryRaw<{ id: string; ownerId: string; sha256: string }[]>`
+    SELECT d."id", d."owner_id" AS "ownerId", d."sha256"
+    FROM "documents" d
+    WHERE d."status" = 'READY'
+      AND EXISTS (
+        SELECT 1 FROM "chunks" c
+        WHERE c."document_id" = d."id" AND c."embedding_model" <> ${space}
+      )
+    ORDER BY d."created_at"`;
 }

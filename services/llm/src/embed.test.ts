@@ -1,7 +1,14 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { hashEmbedding } from './fake/embedding';
-import { CONTEXT_LENGTH_REFUSAL, startFakeOllama, type FakeOllama } from './fake/server';
+import { embeddingSpace } from '@rag/shared';
+
+import {
+  CONTEXT_LENGTH_REFUSAL,
+  fakeDigest,
+  startFakeOllama,
+  type FakeOllama,
+} from './fake/server';
 import { createOllama, LlmError } from './ollama';
 
 const EMBED = 'qwen3-embedding:0.6b';
@@ -161,5 +168,37 @@ describe('checkModel', () => {
       problem: null,
     });
     expect((await ollama.checkModel('chat', EMBED)).problem).not.toBeNull();
+  });
+});
+
+describe('embeddingSpace', () => {
+  const REAL_DIGEST = 'ac6da0dfba84a81fdbfbaf330198c33cd77c4cdfc53e8bc50eb581914a15621d';
+
+  it('reads the digest from /api/tags, so the fake under the real name is another space', async () => {
+    fake = await startFakeOllama({ models: [EMBED] });
+    const space = await createOllama({ baseUrl: fake.url }).embeddingSpace(EMBED);
+    expect(space).toBe(embeddingSpace(EMBED, fakeDigest(EMBED)));
+    expect(space).not.toBe(embeddingSpace(EMBED, REAL_DIGEST));
+    expect(fakeDigest(EMBED)).toMatch(/^[0-9a-f]{64}$/u);
+  });
+
+  it('is the real server’s digest when the real server answers', async () => {
+    const tags = replying({ models: [{ name: EMBED, model: EMBED, digest: REAL_DIGEST }] });
+    expect(await createOllama({ baseUrl: 'http://x', fetch: tags }).embeddingSpace(EMBED)).toBe(
+      'qwen3-embedding:0.6b@ac6da0dfba84',
+    );
+  });
+
+  it('refuses a model that is not pulled, and a server that gives no digest', async () => {
+    const none = replying({ models: [] });
+    expect(
+      (await failure(createOllama({ baseUrl: 'http://x', fetch: none }).embeddingSpace(EMBED)))
+        .code,
+    ).toBe('model_not_found');
+    const bare = replying({ models: [{ name: EMBED }] });
+    expect(
+      (await failure(createOllama({ baseUrl: 'http://x', fetch: bare }).embeddingSpace(EMBED)))
+        .code,
+    ).toBe('protocol');
   });
 });

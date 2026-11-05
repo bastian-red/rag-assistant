@@ -32,6 +32,7 @@
  *   context-length refusal)
  * - `GET /__fake/log`: requests, chats and embeds; `DELETE /__fake/log` clears it
  */
+import { createHash } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
@@ -40,6 +41,18 @@ import { z } from 'zod';
 
 import { scriptedAnswer, streamPieces } from './answer';
 import { hashEmbedding } from './embedding';
+
+/**
+ * The fake's digest for a model: 64 hex digits like a real one, derived from
+ * the name with a `fake:` prefix, so it is stable across runs and can never
+ * equal the real model's. The fake answers to the real model's NAME; its
+ * vectors are hashes, a different space, and the digest is what says so.
+ */
+export function fakeDigest(model: string): string {
+  return createHash('sha256')
+    .update(`fake:${normaliseModel(model)}`)
+    .digest('hex');
+}
 
 /** How the fake answers. Every field has a default; a script overrides some. */
 export interface FakeChatScript {
@@ -228,7 +241,7 @@ export async function startFakeOllama(options: FakeOllamaOptions): Promise<FakeO
       if (method === 'GET' && path === '/api/version') return json(200, { version: VERSION });
       if (method === 'GET' && path === '/api/tags') {
         return json(200, {
-          models: models.map((name) => ({ name, model: name, size: 0, digest: 'fake' })),
+          models: models.map((name) => ({ name, model: name, size: 0, digest: fakeDigest(name) })),
         });
       }
       if (method === 'POST' && path === '/api/show') {

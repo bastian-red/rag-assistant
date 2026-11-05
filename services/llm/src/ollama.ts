@@ -22,6 +22,7 @@
  * (a proxy, a wrong port) must read as "unreachable", never as "no models".
  */
 import {
+  embeddingSpace,
   normaliseModel,
   type ChatEvent,
   type ChatMessage,
@@ -40,7 +41,9 @@ import { ThinkStripper } from './think';
 export { LlmError, OllamaUnreachable } from './errors';
 
 const tagsSchema = z.object({
-  models: z.array(z.object({ name: z.string(), model: z.string().optional() })),
+  models: z.array(
+    z.object({ name: z.string(), model: z.string().optional(), digest: z.string().optional() }),
+  ),
 });
 
 const showSchema = z.object({
@@ -106,6 +109,12 @@ export interface Ollama {
     options?: ChatOptions,
   ): AsyncGenerator<ChatEvent>;
   embed(model: string, texts: readonly string[], options?: EmbedOptions): Promise<number[][]>;
+  /**
+   * The vector space this server's `model` embeds into (`embeddingSpace` in
+   * @rag/shared), from its `/api/tags` digest. `model_not_found` when not
+   * pulled; `protocol` when the server gives no digest.
+   */
+  embeddingSpace(model: string): Promise<string>;
 }
 
 /** Why a pulled model cannot do its job, from `/api/show`; null when it can. */
@@ -151,7 +160,7 @@ export function createOllama(options: OllamaOptions): Ollama {
     }
   }
 
-  async function listModels(): Promise<string[]> {
+  async function tags(): Promise<{ model: string; digest: string | undefined }[]> {
     let body: unknown;
     try {
       const response = await doFetch(`${base}/api/tags`, {
@@ -169,7 +178,27 @@ export function createOllama(options: OllamaOptions): Ollama {
     if (!parsed.success) {
       throw new OllamaUnreachable('GET /api/tags answered in a shape that is not Ollama’s');
     }
-    return parsed.data.models.map((m) => normaliseModel(m.model ?? m.name));
+    return parsed.data.models.map((m) => ({
+      model: normaliseModel(m.model ?? m.name),
+      digest: m.digest,
+    }));
+  }
+
+  async function listModels(): Promise<string[]> {
+    return (await tags()).map((m) => m.model);
+  }
+
+  async function space(model: string): Promise<string> {
+    const wanted = normaliseModel(model);
+    const entry = (await tags()).find((m) => m.model === wanted);
+    if (entry === undefined) {
+      throw new LlmError('model_not_found', `model '${model}' is not pulled`);
+    }
+    try {
+      return embeddingSpace(model, entry.digest ?? '');
+    } catch {
+      throw new LlmError('protocol', `GET /api/tags gave '${model}' no usable digest`);
+    }
   }
 
   async function check(
@@ -396,7 +425,7 @@ export function createOllama(options: OllamaOptions): Ollama {
     return check(role, model, new Set(await listModels()));
   }
 
-  return { listModels, checkModels, checkModel, chat, embed };
+  return { listModels, checkModels, checkModel, chat, embed, embeddingSpace: space };
 }
 
 /** The models a status says are missing, by the names the operator configured. */

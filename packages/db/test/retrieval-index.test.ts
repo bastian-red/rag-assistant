@@ -169,3 +169,24 @@ describe('full text', () => {
     expect(plan.map((row) => row['QUERY PLAN']).join('\n')).toContain(CHUNK_TSV_INDEX);
   });
 });
+
+describe('row storage (migration 20261105120000_chunk_inline_storage)', () => {
+  // A vector out of line costs a TOAST read per distance: the retrieval bench
+  // measured the text search at 27,166 buffers before and 4,459 after.
+  it('keeps the embedding in the row (PLAIN) and the tsv compressed in it (MAIN)', async () => {
+    const rows = await db.$queryRaw<{ attname: string; attstorage: string }[]>`
+      SELECT attname, attstorage::text AS attstorage FROM pg_attribute
+      WHERE attrelid = 'chunks'::regclass AND attname IN ('embedding', 'tsv')
+      ORDER BY attname`;
+    expect(rows).toEqual([
+      { attname: 'embedding', attstorage: 'p' },
+      { attname: 'tsv', attstorage: 'm' },
+    ]);
+  });
+
+  it('toasts only a row that would not fit a page', async () => {
+    const [row] = await db.$queryRaw<{ reloptions: string[] | null }[]>`
+      SELECT reloptions FROM pg_class WHERE relname = 'chunks'`;
+    expect(row?.reloptions).toContain('toast_tuple_target=8160');
+  });
+});

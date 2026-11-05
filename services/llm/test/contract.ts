@@ -15,7 +15,13 @@
  * does not have.
  */
 import { createMarkerStream } from '@rag/citations';
-import { formatSources, type ChatEvent, type LlmClient } from '@rag/shared';
+import {
+  embeddingSpaceSchema,
+  formatSources,
+  normaliseModel,
+  type ChatEvent,
+  type LlmClient,
+} from '@rag/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createLlm, LlmError, type LlmConfig } from '../src';
@@ -128,6 +134,22 @@ export function llmContract(name: string, timeoutMs: number, target: () => Contr
           present: false,
           problem: null,
         });
+      });
+    });
+
+    describe('embeddingSpace()', () => {
+      it('names the configured model and the digest the server reports', async () => {
+        const t = target();
+        const space = await client().embeddingSpace();
+        expect(embeddingSpaceSchema.safeParse(space).success).toBe(true);
+        expect(space.startsWith(`${normaliseModel(t.embedModel)}@`)).toBe(true);
+        expect(await client().embeddingSpace()).toBe(space);
+      });
+
+      it('refuses a model that is not pulled', async () => {
+        await expect(
+          client({ embedModel: 'no-such-model-anywhere:1b' }).embeddingSpace(),
+        ).rejects.toMatchObject({ code: 'model_not_found' });
       });
     });
 

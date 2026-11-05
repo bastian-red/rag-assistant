@@ -14,13 +14,16 @@ import { Redis } from 'ioredis';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { startIngest, type RunningIngest } from '../src/app';
+import { ingestDocument } from '../src/pipeline';
 import {
   addDocument,
   chunksOf,
   closeSupport,
   config,
   db,
+  deps,
   eventually,
+  FAKE_SPACE,
   fakeEmbedCalls,
   forgetPeople,
   longMarkdown,
@@ -102,6 +105,55 @@ describe('the running worker', () => {
       .parse(await degraded.json())
       .checks.find((c) => c.name === 'embed-model');
     expect(check?.detail).toBe('not pulled: nomic-embed-text:latest (run scripts/ollama-setup.sh)');
+  });
+});
+
+describe('chunks from another vector space', () => {
+  /** A READY document whose chunks say they came from `label`. */
+  async function readyUnder(label: string, name: string) {
+    const person = await newPerson(name);
+    const job = await addDocument(person, `${name}.md`, encode(longMarkdown(3)));
+    await ingestDocument(job, deps());
+    await db.$executeRaw`UPDATE chunks SET embedding_model = ${label} WHERE document_id = ${job.documentId}`;
+    return job;
+  }
+  const spacesOf = async (documentId: string) =>
+    new Set((await chunksOf(documentId)).map((c) => c.embedding_model));
+
+  it('are embedded again at start: the bare name the fake once wrote under is not this space', async () => {
+    // Exactly what the dev database held on 2026-11-05: the fake's hashed
+    // vectors labelled with the real model's name.
+    const job = await readyUnder(config.embedModel, 'stale-start');
+    const chunks = (await chunksOf(job.documentId)).length;
+    await start();
+    await eventually('re-embedded in the current space', async () => {
+      const spaces = await spacesOf(job.documentId);
+      return (
+        spaces.size === 1 && spaces.has(FAKE_SPACE) && (await statusOf(job.documentId)) === 'READY'
+      );
+    });
+    expect((await chunksOf(job.documentId)).length).toBe(chunks);
+  });
+
+  it('are found by the periodic sweep too, not only at start', async () => {
+    const person = await newPerson('stale-sweep');
+    const job = await addDocument(person, 'sweep.md', encode(longMarkdown(2)));
+    await start({ sweepMs: 1_000 });
+    await eventually('READY', async () => (await statusOf(job.documentId)) === 'READY');
+    await db.$executeRaw`UPDATE chunks SET embedding_model = 'other-model:1b@0123456789ab' WHERE document_id = ${job.documentId}`;
+    await eventually('the sweep to re-embed it', async () => {
+      const spaces = await spacesOf(job.documentId);
+      return spaces.size === 1 && spaces.has(FAKE_SPACE);
+    });
+  });
+
+  it('leave a document in the current space alone', async () => {
+    const job = await readyUnder(FAKE_SPACE, 'current');
+    const before = await fakeEmbedCalls();
+    await start({ sweepMs: 1_000 });
+    await new Promise((resolve) => setTimeout(resolve, 2_500));
+    expect(await fakeEmbedCalls()).toBe(before);
+    expect(await statusOf(job.documentId)).toBe('READY');
   });
 });
 

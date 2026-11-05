@@ -19,5 +19,6 @@ export function createLlm(config: LlmConfig, ollama: Ollama = createOllama(confi
     chat: (messages, options) => ollama.chat(config.chatModel, messages, options),
     embed: (texts, options) => ollama.embed(config.embedModel, texts, options),
     models: () => ollama.checkModels({ chat: config.chatModel, embed: config.embedModel }),
+    embeddingSpace: () => ollama.embeddingSpace(config.embedModel),
   };
 }

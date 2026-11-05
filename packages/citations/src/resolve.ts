@@ -17,6 +17,27 @@
  */
 import { codePointOffsets, unitsOf } from '@rag/chunker';
 
+export interface PageStart {
+  readonly page: number;
+  readonly at: number;
+}
+
+/**
+ * One stored chunk inside a source that retrieval merged from neighbours
+ * (consecutive chunks of one document whose spans overlap or touch). The
+ * source's text is the exact document text over their union, and each part
+ * says where its chunk begins in it.
+ */
+export interface PackedPart {
+  readonly chunkId: string;
+  /** Code points from the start of the source's text to the chunk's first. */
+  readonly at: number;
+  /** The chunk's length in code points (`char_end - char_start`). */
+  readonly length: number;
+  readonly page: number | null;
+  readonly pageStarts?: readonly PageStart[];
+}
+
 /** One source in the packed context, labelled `[S<marker>]` in the prompt. */
 export interface PackedSource {
   readonly marker: number;
@@ -25,9 +46,43 @@ export interface PackedSource {
   /** The chunk's first page; null for markdown and text. */
   readonly page: number | null;
   /** Later pages inside the chunk (the chunker's `pageStarts`); omit for one page. */
-  readonly pageStarts?: readonly { readonly page: number; readonly at: number }[];
-  /** The chunk's text, exactly as stored. */
+  readonly pageStarts?: readonly PageStart[];
+  /** The chunk's text, exactly as stored (or the merged parts' union). */
   readonly text: string;
+  /**
+   * Set when the source is several neighbouring chunks merged: a quote is
+   * then stored against the part it starts in, with offsets in that chunk.
+   * `chunkId`, `page` and `pageStarts` above describe the first part.
+   */
+  readonly parts?: readonly PackedPart[];
+}
+
+/**
+ * The chunk a quote [start, end) of a source belongs to, and the quote in
+ * that chunk's own offsets. A quote is a whole unit, and retrieval only
+ * merges chunks that begin and end on unit boundaries, so it fits one part;
+ * when it does not (a unit the merged text reads differently), it is cut at
+ * the end of the part it starts in, so the stored span is always the chunk's.
+ */
+export function partOf(
+  source: PackedSource,
+  start: number,
+  end: number,
+): { part: PackedPart; start: number; end: number } {
+  const parts: readonly PackedPart[] = source.parts ?? [
+    {
+      chunkId: source.chunkId,
+      at: 0,
+      length: [...source.text].length,
+      page: source.page,
+      ...(source.pageStarts === undefined ? {} : { pageStarts: source.pageStarts }),
+    },
+  ];
+  const holding = parts.filter((p) => p.at <= start && start < p.at + p.length);
+  const part =
+    holding.find((p) => end <= p.at + p.length) ?? holding.at(-1) ?? parts.at(-1) ?? parts[0]!;
+  const from = Math.min(Math.max(start - part.at, 0), Math.max(part.length - 1, 0));
+  return { part, start: from, end: Math.max(Math.min(end - part.at, part.length), from + 1) };
 }
 
 /** What a `citations` row stores. Offsets are code points within the chunk. */
@@ -146,18 +201,20 @@ export function resolveCitations(
       }
     }
     const points = codePointOffsets(source.text);
-    const quoteStart = points(best.start);
+    const located = partOf(source, points(best.start), points(best.end));
+    const { part } = located;
     // The page the quote itself starts on, not the chunk's first page.
     const page =
-      (source.pageStarts ?? []).filter((s) => s.at <= quoteStart).at(-1)?.page ?? source.page;
+      (part.pageStarts ?? []).filter((s) => s.at <= located.start).at(-1)?.page ?? part.page;
+    const sourcePoints = [...source.text];
     out.push({
       marker,
-      chunkId: source.chunkId,
+      chunkId: part.chunkId,
       documentTitle: source.documentTitle,
       page,
-      quote: source.text.slice(best.start, best.end),
-      quoteStart,
-      quoteEnd: points(best.end),
+      quote: sourcePoints.slice(part.at + located.start, part.at + located.end).join(''),
+      quoteStart: located.start,
+      quoteEnd: located.end,
     });
   }
   return out;

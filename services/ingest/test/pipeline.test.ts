@@ -9,7 +9,8 @@ import { removeStoredFile } from '@rag/shared/server';
 import { UnrecoverableError } from 'bullmq';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
-import { ingestDocument } from '../src/pipeline';
+import { ingestDocument, SpaceChanged } from '../src/pipeline';
+import { refusalOf } from '../src/errors';
 import { processor } from '../src/worker';
 import { makePdf } from './pdf';
 import {
@@ -19,6 +20,7 @@ import {
   config,
   db,
   deps,
+  FAKE_SPACE,
   forgetPeople,
   listen,
   longMarkdown,
@@ -54,7 +56,8 @@ describe('a markdown document', () => {
     const rows = await chunksOf(job.documentId);
     expect(rows.map((r) => r.ord)).toEqual(expected.map((c) => c.ord));
     expect(rows.map((r) => r.text)).toEqual(expected.map((c) => c.text));
-    expect(new Set(rows.map((r) => r.embedding_model))).toEqual(new Set([config.embedModel]));
+    // The space the server reported, not the configured name (SPECS #4, step 6).
+    expect(new Set(rows.map((r) => r.embedding_model))).toEqual(new Set([FAKE_SPACE]));
     expect(new Set(rows.map((r) => r.dims))).toEqual(new Set([1024]));
     const doc = await db.document.findUniqueOrThrow({ where: { id: job.documentId } });
     expect({ status: doc.status, error: doc.error, pages: doc.pages }).toEqual({
@@ -186,5 +189,21 @@ describe('failures', () => {
     expect((await db.document.findUniqueOrThrow({ where: { id: job.documentId } })).status).toBe(
       'QUEUED',
     );
+  });
+});
+
+describe('the vector space', () => {
+  it('is read before and after embedding; a change in between writes nothing and is retried', async () => {
+    const person = await newPerson('space');
+    const job = await addDocument(person, 'space.md', encode(longMarkdown(2)));
+    const spaces = ['a-model:1b@0123456789ab', 'a-model:1b@ba9876543210'];
+    const error = await ingestDocument(
+      job,
+      deps({ embeddingSpace: async () => spaces.shift() ?? 'unreachable' }),
+    ).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(SpaceChanged);
+    expect(await chunksOf(job.documentId)).toEqual([]);
+    // Not a refusal: the worker retries it, and the retry embeds it whole.
+    expect(refusalOf(error)).toBeNull();
   });
 });

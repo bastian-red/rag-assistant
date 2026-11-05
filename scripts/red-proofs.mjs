@@ -26,7 +26,9 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
  * name, file, exact text, its broken replacement, and the suite that must go
- * red; `freshDatabase` for a proof that edits a migration (see databaseUrl).
+ * red: ['unit', package] or ['integration', API test filter, phase] where
+ * phase is one of integration.sh's (db, ingest, retrieval, bench, api);
+ * `freshDatabase` for a proof that edits a migration (see databaseUrl).
  */
 const PROOFS = [
   // --- the API's guards and budgets ----------------------------------------
@@ -62,8 +64,8 @@ const PROOFS = [
   {
     name: 'model client reads a non-Ollama 200 as a model list',
     file: 'services/llm/src/ollama.ts',
-    from: '    if (!parsed.success) {\n',
-    to: '    if (!parsed.success && false) {\n',
+    from: '    const parsed = tagsSchema.safeParse(body);\n    if (!parsed.success) {\n',
+    to: '    const parsed = tagsSchema.safeParse(body);\n    if (!parsed.success && false) {\n',
     suite: ['unit', '@rag/llm'],
   },
   {
@@ -192,8 +194,8 @@ const PROOFS = [
   {
     name: 'quote offsets stored in UTF-16 units, not code points',
     file: 'packages/citations/src/resolve.ts',
-    from: '    const quoteStart = points(best.start);',
-    to: '    const quoteStart = best.start;',
+    from: '    const located = partOf(source, points(best.start), points(best.end));',
+    to: '    const located = partOf(source, best.start, best.end);',
     suite: ['unit', '@rag/citations'],
   },
   {
@@ -208,7 +210,8 @@ const PROOFS = [
     file: 'packages/db/prisma/migrations/20261101230000_chunk_page_starts/migration.sql',
     from: '         OR (s.last AND s.page <> page_end)\n',
     to: '',
-    suite: ['integration', 'library'],
+    // Every phase: the database suite holds the CHECK, the API suite reads through it.
+    suite: ['integration', 'library', ''],
     freshDatabase: 'rag_proof',
   },
   // --- the model client: chat, embeddings, readiness (build step 4) ---------
@@ -282,13 +285,106 @@ const PROOFS = [
     to: '',
     suite: ['unit', '@rag/llm'],
   },
+  // --- vector spaces: a vector is searched only against its own space -----
+  {
+    name: 'the embedding space is the configured name, not the server’s digest',
+    file: 'services/llm/src/ollama.ts',
+    from: "      return embeddingSpace(model, entry.digest ?? '');\n",
+    to: '      return normaliseModel(model);\n',
+    suite: ['unit', '@rag/llm'],
+  },
+  {
+    name: 'the fake hashes the query instruction as content',
+    file: 'services/llm/src/fake/embedding.ts',
+    from: "text.replace(INSTRUCTION, '').normalize('NFC')",
+    to: "text.normalize('NFC')",
+    suite: ['unit', '@rag/llm'],
+  },
+  {
+    name: 'chunks embedded in another space are never embedded again',
+    file: 'services/ingest/src/reconcile.ts',
+    from: '  const stale = space === null ? null : await staleDocuments(prisma, space);\n',
+    to: '  const stale = space === null ? null : await staleDocuments(prisma, space).then(() => []);\n',
+    suite: ['integration', undefined, 'ingest'],
+  },
+  {
+    name: 'a model swapped mid-document leaves two spaces in one chunk set',
+    file: 'services/ingest/src/pipeline.ts',
+    from: '  if (after !== space) throw new SpaceChanged(space, after);\n',
+    to: '',
+    suite: ['integration', undefined, 'ingest'],
+  },
+  // --- retrieval: scope, fusion, packing, abstention, speed -----------------
+  {
+    name: 'retrieval searches without the owner filter',
+    file: 'services/retrieval/src/search.ts',
+    from: '    c."owner_id" = ${scope.ownerId}\n    AND c."embedding_model" = ${scope.space}\n',
+    to: '    c."embedding_model" = ${scope.space}\n',
+    suite: ['integration', undefined, 'retrieval'],
+  },
+  {
+    name: 'retrieval searches documents that are not READY',
+    file: 'services/retrieval/src/search.ts',
+    from: '    AND d."status" = \'READY\'\n    ${collection}`;',
+    to: '    ${collection}`;',
+    suite: ['integration', undefined, 'retrieval'],
+  },
+  {
+    name: 'retrieval searches every vector space',
+    file: 'services/retrieval/src/search.ts',
+    from: '    AND c."embedding_model" = ${scope.space}\n    AND d.',
+    to: '    AND d.',
+    suite: ['integration', undefined, 'retrieval'],
+  },
+  {
+    name: 'full text requires every word of the question',
+    file: 'services/retrieval/src/search.ts',
+    from: "' (&|<->|<[0-9]+>) ', ' | ', 'g'",
+    to: "' (&|<->|<[0-9]+>) ', ' & ', 'g'",
+    suite: ['integration', undefined, 'retrieval'],
+  },
+  {
+    name: 'the searches run on generic plans',
+    file: 'services/retrieval/src/search.ts',
+    from: '    await tx.$executeRawUnsafe(`SET LOCAL plan_cache_mode = force_custom_plan`);\n',
+    to: '',
+    suite: ['integration', undefined, 'bench'],
+  },
+  {
+    name: 'a merged source repeats the overlap',
+    file: 'services/retrieval/src/pack.ts',
+    from: '    text.push(...points(next.text).slice(end - next.charStart));\n',
+    to: '    text.push(...points(next.text));\n',
+    suite: ['unit', '@rag/retrieval'],
+  },
+  {
+    name: 'a repeated passage is packed twice',
+    file: 'services/retrieval/src/pack.ts',
+    from: '    if (seen.has(key)) {\n',
+    to: '    if (seen.has(key) && false) {\n',
+    suite: ['unit', '@rag/retrieval'],
+  },
+  {
+    name: 'retrieval never abstains',
+    file: 'services/retrieval/src/abstain.ts',
+    from: 'bestSimilarity < minSimilarity',
+    to: 'bestSimilarity < -2',
+    suite: ['unit', '@rag/retrieval'],
+  },
+  {
+    name: 'a quote from a merged source is stored against its first chunk',
+    file: 'packages/citations/src/resolve.ts',
+    from: '      chunkId: part.chunkId,\n',
+    to: '      chunkId: source.chunkId,\n',
+    suite: ['unit', '@rag/citations'],
+  },
   // --- ingestion: one chunk set, refusals not retried, uploads checked ------
   {
     name: 'a re-run appends chunks instead of replacing them',
     file: 'services/ingest/src/store.ts',
     from: '      await tx.$executeRaw`DELETE FROM "chunks" WHERE "document_id" = ${doc.id}`;\n',
     to: '',
-    suite: ['integration', 'health'],
+    suite: ['integration', undefined, 'ingest'],
   },
   {
     name: 'a PDF with no text layer is read as an empty one',
@@ -302,14 +398,14 @@ const PROOFS = [
     file: 'services/ingest/src/worker.ts',
     from: '      if (refusal !== null) throw new UnrecoverableError(refusal.reason);\n',
     to: '',
-    suite: ['integration', 'health'],
+    suite: ['integration', undefined, 'ingest'],
   },
   {
     name: 'a killed worker’s job is failed instead of picked up again',
     file: 'services/ingest/src/worker.ts',
     from: '    maxStalledCount: 2,\n',
     to: '    maxStalledCount: 0,\n',
-    suite: ['integration', 'health'],
+    suite: ['integration', undefined, 'ingest'],
   },
   {
     name: 'upload budget applied to every route',
@@ -392,8 +488,10 @@ function dropDatabase(name) {
 }
 
 function run(suite, proof) {
-  const [lane, arg] = suite;
-  const env = { ...process.env };
+  const [lane, arg, phase] = suite;
+  // One integration phase (db, ingest, retrieval, bench, api) instead of all
+  // of them; an API filter implies the API phase.
+  const env = { ...process.env, INTEGRATION_ONLY: phase ?? (arg === undefined ? '' : 'api') };
   if (proof.freshDatabase !== undefined) {
     dropDatabase(proof.freshDatabase);
     env.INTEGRATION_DATABASE_URL = databaseUrl(proof.freshDatabase);
@@ -402,7 +500,7 @@ function run(suite, proof) {
   const result =
     lane === 'unit'
       ? spawnSync('pnpm', ['--filter', arg ?? '@rag/api', 'exec', 'vitest', 'run'], options)
-      : spawnSync('./scripts/integration.sh', [arg], options);
+      : spawnSync('./scripts/integration.sh', arg === undefined ? [] : [arg], options);
   return {
     status: result.status,
     tail: `${result.stdout}${result.stderr}`

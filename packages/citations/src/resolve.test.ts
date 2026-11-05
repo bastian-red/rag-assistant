@@ -7,6 +7,7 @@ import {
   claimsOf,
   contentWords,
   coverage,
+  partOf,
   resolveCitations,
   stripMarkers,
   type PackedSource,
@@ -174,5 +175,98 @@ describe('resolveCitations', () => {
         },
       ),
     );
+  });
+});
+
+describe('a source merged from overlapping neighbours', () => {
+  // Two sections long enough to split, so chunks 0-1-2 overlap (one section).
+  const sentence = (n: number) =>
+    `Valve ${String(n)} opens when the pressure passes ${String(n)} bar and closes below it. `;
+  const text = `## Valves\n\n${Array.from({ length: 60 }, (_, i) => sentence(i + 1)).join('')}\n`;
+  const doc = chunkDocument({ format: 'markdown', text });
+  const [first, second] = doc.chunks;
+
+  it('needs chunks that overlap (the fixture holds what the test assumes)', () => {
+    expect(second!.charStart).toBeLessThan(first!.charEnd);
+  });
+
+  const union = sliceCodePoints(doc.text, first!.charStart, second!.charEnd);
+  const merged: PackedSource = {
+    marker: 1,
+    chunkId: 'first',
+    documentTitle: 'Valves',
+    page: null,
+    text: union,
+    parts: [
+      { chunkId: 'first', at: 0, length: first!.charEnd - first!.charStart, page: null },
+      {
+        chunkId: 'second',
+        at: second!.charStart - first!.charStart,
+        length: second!.charEnd - second!.charStart,
+        page: null,
+      },
+    ],
+  };
+  // The last valve sentence of the second chunk exists only in it.
+  const onlyInSecond = second!.text.trim().split('. ').at(-2)!;
+
+  it('stores a quote against the chunk it is in, with that chunk’s offsets', () => {
+    const [citation] = resolveCitations(`${onlyInSecond} [S1].`, [merged]);
+    expect(citation!.chunkId).toBe('second');
+    expect(sliceCodePoints(second!.text, citation!.quoteStart, citation!.quoteEnd)).toBe(
+      citation!.quote,
+    );
+    expect(citation!.quote).toContain(onlyInSecond);
+  });
+
+  it('stores a quote from the first part against the first chunk', () => {
+    const [citation] = resolveCitations('Valve 1 opens when the pressure passes 1 bar [S1].', [
+      merged,
+    ]);
+    expect(citation!.chunkId).toBe('first');
+    expect(sliceCodePoints(first!.text, citation!.quoteStart, citation!.quoteEnd)).toBe(
+      citation!.quote,
+    );
+  });
+
+  it('always stores a non-empty span of the chunk it names, whatever is cited', () => {
+    const texts = new Map([
+      ['first', first!.text],
+      ['second', second!.text],
+    ]);
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 60 }), (n) => {
+        for (const citation of resolveCitations(`Valve ${String(n)} opens [S1].`, [merged])) {
+          const chunk = texts.get(citation.chunkId)!;
+          expect(citation.quoteEnd).toBeGreaterThan(citation.quoteStart);
+          expect(sliceCodePoints(chunk, citation.quoteStart, citation.quoteEnd)).toBe(
+            citation.quote,
+          );
+        }
+      }),
+    );
+  });
+
+  it('partOf: the first part holding the whole span, else cut at the end of the one it starts in', () => {
+    const [one, two] = merged.parts!;
+    // Inside the overlap: both hold it, the first wins.
+    expect(partOf(merged, two!.at, two!.at + 4)).toEqual({
+      part: one,
+      start: two!.at,
+      end: two!.at + 4,
+    });
+    // Starts in the overlap, ends past the first: the second holds all of it.
+    expect(partOf(merged, one!.length - 2, one!.length + 3)).toEqual({
+      part: two,
+      start: one!.length - 2 - two!.at,
+      end: one!.length + 3 - two!.at,
+    });
+    // Runs past the end of the source: cut at the last part's end.
+    const last = two!.at + two!.length;
+    expect(partOf(merged, last - 3, last + 10)).toEqual({
+      part: two,
+      start: two!.length - 3,
+      end: two!.length,
+    });
   });
 });

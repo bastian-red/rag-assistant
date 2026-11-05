@@ -35,4 +35,13 @@ describe('hashEmbedding', () => {
     expect(() => hashEmbedding('x', 0)).toThrow(RangeError);
     expect(() => hashEmbedding('x', 1.5)).toThrow(RangeError);
   });
+
+  it('embeds a query in Qwen3-Embedding’s instruction format as its query alone', () => {
+    const instructed = `Instruct: Given a question, retrieve passages that answer it\nQuery: boiler pressure`;
+    expect(hashEmbedding(instructed)).toEqual(hashEmbedding('boiler pressure'));
+    // Only a leading instruction: the same words elsewhere are content.
+    expect(hashEmbedding(`notes ${instructed}`)).not.toEqual(
+      hashEmbedding('notes boiler pressure'),
+    );
+  });
 });

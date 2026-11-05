@@ -1,0 +1,29 @@
+{
+  "name": "@rag/retrieval",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hybrid retrieval over one person's library: pgvector HNSW and Postgres full text, fused by reciprocal rank, neighbours merged, packed under a token budget, with a calibrated abstain. A library the API calls; it runs no process of its own.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
+  },
+  "dependencies": {
+    "@rag/chunker": "workspace:*",
+    "@rag/citations": "workspace:*",
+    "@rag/db": "workspace:*",
+    "@rag/shared": "workspace:*",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@rag/config": "workspace:*",
+    "@rag/llm": "workspace:*",
+    "@types/node": "^20.17.6",
+    "fast-check": "^3.23.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}

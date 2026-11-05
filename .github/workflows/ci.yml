@@ -90,7 +90,7 @@ jobs:
           TZ: Pacific/Kiritimati
 
   integration:
-    name: Integration (schema guarantees, seed check, real Nest graph, Postgres, Redis, documented budgets)
+    name: Integration (schema guarantees, seed check, ingest, retrieval and its p95 bench, real Nest graph, documented budgets)
     runs-on: ubuntu-24.04
     env:
       AUTH_SECRET: ci-secret-at-least-32-characters-long

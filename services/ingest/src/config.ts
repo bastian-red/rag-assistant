@@ -49,6 +49,12 @@ export interface IngestConfig {
    * after at most about twice this.
    */
   lockMs: number;
+  /**
+   * How often the worker looks for documents that need a job: unfinished ones
+   * with none, and READY ones embedded in another vector space than the
+   * model server reports now (see `reconcile.ts`).
+   */
+  sweepMs: number;
 }
 
 export class ConfigError extends Error {
@@ -69,6 +75,7 @@ const ENV_NAMES: Record<string, string> = {
   uploadDir: 'UPLOAD_DIR',
   concurrency: 'INGEST_CONCURRENCY',
   lockMs: 'INGEST_LOCK_MS',
+  sweepMs: 'INGEST_SWEEP_MS',
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): IngestConfig {
@@ -90,6 +97,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): IngestConfig {
       .refine(isAbsolute, 'must be an absolute path (scripts/load-env.sh resolves a relative one)'),
     concurrency: whole(1, 16).default(1),
     lockMs: whole(5_000, 600_000).default(30_000),
+    sweepMs: whole(1_000, 3_600_000).default(60_000),
   });
 
   const blank = (v: string | undefined) => (v === undefined || v.trim() === '' ? undefined : v);
@@ -104,6 +112,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): IngestConfig {
     uploadDir: env.UPLOAD_DIR,
     concurrency: blank(env.INGEST_CONCURRENCY),
     lockMs: blank(env.INGEST_LOCK_MS),
+    sweepMs: blank(env.INGEST_SWEEP_MS),
   });
   if (!parsed.success) {
     const lines = parsed.error.issues.map(

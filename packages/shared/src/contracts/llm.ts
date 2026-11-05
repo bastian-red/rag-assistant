@@ -133,6 +133,12 @@ export interface LlmClient {
   embed(texts: readonly string[], options?: EmbedOptions): Promise<number[][]>;
   /** The configured chat and embedding models: pulled, and able to do their job. */
   models(): Promise<ModelStatus>;
+  /**
+   * The vector space `embed` writes into right now (`embeddingSpace`), read
+   * from the server, never from configuration. Throws `model_not_found` when
+   * the embedding model is not pulled.
+   */
+  embeddingSpace(): Promise<string>;
 }
 
 /** `qwen3` -> `qwen3:latest`; `qwen3:4b` unchanged. Case-insensitive, like Ollama. */
@@ -143,3 +149,27 @@ export function normaliseModel(ref: string): string {
   const name = trimmed.slice(trimmed.lastIndexOf('/') + 1);
   return name.includes(':') ? trimmed : `${trimmed}:latest`;
 }
+
+/**
+ * Which vector space an embedding lives in: the model's name AND the exact
+ * weights the server ran, `qwen3-embedding:0.6b@ac6da0dfba84`.
+ *
+ * A name alone is not an identity. Two servers can answer to the same name
+ * with different weights (a re-pull, a different quantisation, or the fake
+ * model server, which answers to the real model's name with hashed vectors),
+ * and a vector from one space searched against another ranks by noise while
+ * looking normal. This string is stored on every chunk and compared at query
+ * time, so that mix cannot happen silently. The digest comes from the
+ * server's `/api/tags`, the first 12 hex digits, as `ollama list` prints it.
+ */
+export function embeddingSpace(model: string, digest: string): string {
+  const hex = digest.replace(/^sha256:/u, '').toLowerCase();
+  if (!/^[0-9a-f]{12,64}$/u.test(hex)) {
+    throw new RangeError(`a model digest is hex, got ${JSON.stringify(digest)}`);
+  }
+  return `${normaliseModel(model)}@${hex.slice(0, 12)}`;
+}
+
+export const embeddingSpaceSchema = z
+  .string()
+  .regex(/^[a-z0-9][a-z0-9._\-/:]*@[0-9a-f]{12}$/u, 'must be <model>@<12 hex digits>');

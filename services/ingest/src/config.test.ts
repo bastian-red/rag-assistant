@@ -16,6 +16,7 @@ describe('loadConfig', () => {
       port: 4500,
       concurrency: 1,
       lockMs: 30_000,
+      sweepMs: 60_000,
       ollamaUrl: 'http://localhost:11434',
       uploadDir: '/srv/uploads',
     });

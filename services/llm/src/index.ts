@@ -3,6 +3,7 @@ export { createLlm, type LlmConfig } from './client';
 export { ThinkStripper } from './think';
 export {
   startFakeOllama,
+  fakeDigest,
   CONTEXT_LENGTH_REFUSAL,
   type FakeOllama,
   type FakeOllamaOptions,

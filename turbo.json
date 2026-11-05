@@ -28,6 +28,7 @@
     "INGEST_CONCURRENCY",
     "INGEST_LOCK_MS",
     "INGEST_PORT",
+    "INGEST_SWEEP_MS",
     "INGEST_URL",
     "OLLAMA_URL",
     "PORT",

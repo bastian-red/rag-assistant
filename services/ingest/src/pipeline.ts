@@ -25,7 +25,12 @@ export interface PipelineDeps {
   readonly prisma: PrismaClient;
   /** Embeds one batch, in order. Bound to EMBED_MODEL by the caller. */
   readonly embed: (texts: readonly string[]) => Promise<number[][]>;
-  readonly embedModel: string;
+  /**
+   * The vector space `embed` writes into, as the model server reports it
+   * (`embeddingSpace` in @rag/shared). Stored on every chunk; retrieval only
+   * searches chunks of the space it embeds queries in.
+   */
+  readonly embeddingSpace: () => Promise<string>;
   readonly uploadDir: string;
   readonly publish: Publish;
   /** Passages per embed call, and so per progress event. */
@@ -39,6 +44,14 @@ export type Outcome =
   | { readonly kind: 'gone' };
 
 const GONE: Outcome = { kind: 'gone' };
+
+/** The model changed under a document while it was embedded. Transient: the retry embeds it whole. */
+export class SpaceChanged extends Error {
+  constructor(before: string, after: string) {
+    super(`the embedding model changed while embedding (${before} -> ${after})`);
+    this.name = 'SpaceChanged';
+  }
+}
 
 function chunkInput(parsed: Parsed): ChunkInput {
   return parsed.format === 'pdf'
@@ -83,6 +96,9 @@ export async function ingestDocument(job: IngestJob, deps: PipelineDeps): Promis
   if (!(await setStatus(deps.prisma, doc, 'EMBEDDING'))) return GONE;
   await announce(doc, { status: 'EMBEDDING', progress: { done: 0, total }, error: null });
 
+  // Read before and after: a model re-pulled mid-document would leave one
+  // chunk set holding two spaces, which no later check could see.
+  const space = await deps.embeddingSpace();
   const vectors: number[][] = [];
   for (let at = 0; at < total; at += batchSize) {
     const texts = chunked.chunks.slice(at, at + batchSize).map((chunk) => chunk.text);
@@ -94,12 +110,15 @@ export async function ingestDocument(job: IngestJob, deps: PipelineDeps): Promis
     });
   }
 
+  const after = await deps.embeddingSpace();
+  if (after !== space) throw new SpaceChanged(space, after);
+
   const written = await replaceChunks(
     deps.prisma,
     doc,
     chunked.chunks,
     vectors,
-    deps.embedModel,
+    space,
     chunked.pageCount,
   );
   if (!written) return GONE;

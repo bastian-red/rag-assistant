@@ -8,8 +8,14 @@
 import { randomUUID } from 'node:crypto';
 
 import { createPrismaClient, type PrismaClient } from '@rag/db';
-import { createOllama } from '@rag/llm';
-import { documentTitle, ingestChannel, ingestEventSchema, type IngestEvent } from '@rag/shared';
+import { createOllama, fakeDigest } from '@rag/llm';
+import {
+  documentTitle,
+  embeddingSpace,
+  ingestChannel,
+  ingestEventSchema,
+  type IngestEvent,
+} from '@rag/shared';
 import { sha256Of, writeStoredFile } from '@rag/shared/server';
 import { Redis } from 'ioredis';
 
@@ -21,12 +27,15 @@ export const config: IngestConfig = loadConfig();
 export const db: PrismaClient = createPrismaClient({ url: config.databaseUrl });
 const ollama = createOllama({ baseUrl: config.ollamaUrl });
 
+/** The space the fake model server embeds into: its own digest, not the real model's. */
+export const FAKE_SPACE = embeddingSpace(config.embedModel, fakeDigest(config.embedModel));
+
 export function deps(overrides: Partial<PipelineDeps> = {}): PipelineDeps {
   const redis = publisher();
   return {
     prisma: db,
     embed: (texts) => ollama.embed(config.embedModel, texts),
-    embedModel: config.embedModel,
+    embeddingSpace: () => ollama.embeddingSpace(config.embedModel),
     uploadDir: config.uploadDir,
     publish: redisPublisher(redis),
     ...overrides,

@@ -7,5 +7,19 @@ export {
   MAX_RANGE,
 } from './markers';
 export type { DroppedMarker, MarkerStream, StreamOutput } from './markers';
-export { resolveCitations, claimsOf, coverage, contentWords, stripMarkers } from './resolve';
-export type { Claim, Coverage, PackedSource, ResolvedCitation } from './resolve';
+export {
+  resolveCitations,
+  claimsOf,
+  coverage,
+  contentWords,
+  partOf,
+  stripMarkers,
+} from './resolve';
+export type {
+  Claim,
+  Coverage,
+  PackedPart,
+  PackedSource,
+  PageStart,
+  ResolvedCitation,
+} from './resolve';
