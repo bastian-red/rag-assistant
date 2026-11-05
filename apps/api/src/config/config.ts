@@ -64,6 +64,14 @@ export interface ApiConfig {
   rateLimitAuth: number;
   /** Uploads per minute per person, on top of the general budget. */
   rateLimitUpload: number;
+  /** Questions per minute per person, on top of the general budget: each one runs the model. */
+  rateLimitChat: number;
+  /**
+   * The abstain threshold, when the embedding space in use is not the one the
+   * default was measured on (the fake model server's hashed vectors in the
+   * integration and E2E lanes). Null keeps `@rag/retrieval`'s measured default.
+   */
+  minSimilarity: number | null;
   /** Absolute. Uploads are stored at `<uploadDir>/<ownerId>/<sha256>`, which the worker reads. */
   uploadDir: string;
   /** The ingest worker's health server, which `GET /status` asks. */
@@ -91,6 +99,8 @@ const ENV_NAMES: Record<string, string> = {
   rateLimitGlobal: 'RATE_LIMIT_GLOBAL',
   rateLimitAuth: 'RATE_LIMIT_AUTH',
   rateLimitUpload: 'RATE_LIMIT_UPLOAD',
+  rateLimitChat: 'RATE_LIMIT_CHAT',
+  minSimilarity: 'RETRIEVAL_MIN_SIMILARITY',
   uploadDir: 'UPLOAD_DIR',
   ingestUrl: 'INGEST_URL',
 };
@@ -117,6 +127,22 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     rateLimitGlobal: positiveInt,
     rateLimitAuth: positiveInt,
     rateLimitUpload: positiveInt,
+    rateLimitChat: positiveInt,
+    // Empty means "the measured default". A cosine similarity is in [-1, 1];
+    // a value outside it would abstain on everything or on nothing.
+    minSimilarity: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => (v === undefined || v === '' ? null : v))
+      .pipe(
+        z
+          .string()
+          .regex(/^-?(?:0|[1-9]\d*)?(?:\.\d+)?$/u, 'must be a number such as 0.43')
+          .transform(Number)
+          .pipe(z.number().min(-1, 'must be between -1 and 1').max(1, 'must be between -1 and 1'))
+          .nullable(),
+      ),
     // Absolute: this process and the worker run from different directories,
     // so a relative path would name two folders (scripts/load-env.sh resolves
     // the documented `.data/uploads` against the repo root).
@@ -141,6 +167,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     rateLimitGlobal: env.RATE_LIMIT_GLOBAL,
     rateLimitAuth: env.RATE_LIMIT_AUTH,
     rateLimitUpload: env.RATE_LIMIT_UPLOAD,
+    rateLimitChat: env.RATE_LIMIT_CHAT,
+    minSimilarity: env.RETRIEVAL_MIN_SIMILARITY,
     uploadDir: env.UPLOAD_DIR,
     ingestUrl: env.INGEST_URL,
   });

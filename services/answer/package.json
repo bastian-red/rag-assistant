@@ -1,0 +1,27 @@
+{
+  "name": "@rag/answer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "One question to one cited answer: retrieval, the prompt, the streamed model call, citation markers checked against the packed sources, stop and deadline. No HTTP and no storage, so the API and the eval lane run the same code.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@rag/chunker": "workspace:*",
+    "@rag/citations": "workspace:*",
+    "@rag/retrieval": "workspace:*",
+    "@rag/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@rag/config": "workspace:*",
+    "@rag/llm": "workspace:*",
+    "@types/node": "^20.17.6",
+    "fast-check": "^3.23.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}

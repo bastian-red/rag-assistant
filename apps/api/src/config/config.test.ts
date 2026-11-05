@@ -17,6 +17,7 @@ function env(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
     RATE_LIMIT_GLOBAL: '240',
     RATE_LIMIT_AUTH: '5',
     RATE_LIMIT_UPLOAD: '10',
+    RATE_LIMIT_CHAT: '20',
     UPLOAD_DIR: '/srv/rag/uploads',
     INGEST_URL: 'http://localhost:4500/',
     ...overrides,
@@ -77,6 +78,29 @@ describe('the upload settings', () => {
   });
 });
 
+describe('the chat settings', () => {
+  it('reads the chat budget, and an absent or empty threshold as the measured default', () => {
+    const config = loadConfig(env());
+    expect(config.rateLimitChat).toBe(20);
+    expect(config.minSimilarity).toBeNull();
+    expect(loadConfig(env({ RETRIEVAL_MIN_SIMILARITY: ' ' })).minSimilarity).toBeNull();
+  });
+
+  it('reads a threshold override as a number in [-1, 1]', () => {
+    expect(loadConfig(env({ RETRIEVAL_MIN_SIMILARITY: '0.12' })).minSimilarity).toBe(0.12);
+    expect(loadConfig(env({ RETRIEVAL_MIN_SIMILARITY: '-0.5' })).minSimilarity).toBe(-0.5);
+    expect(loadConfig(env({ RETRIEVAL_MIN_SIMILARITY: '.3' })).minSimilarity).toBe(0.3);
+  });
+
+  it('refuses a threshold that is not a similarity, by name', () => {
+    for (const bad of ['1.5', '-2', 'abc', '0.4.3', '1e-1']) {
+      expect(() => loadConfig(env({ RETRIEVAL_MIN_SIMILARITY: bad }))).toThrow(
+        /RETRIEVAL_MIN_SIMILARITY/u,
+      );
+    }
+  });
+});
+
 describe('assertConsistent', () => {
   it('accepts the documented defaults', () => {
     expect(() => assertConsistent(loadConfig(env()))).not.toThrow();
@@ -87,6 +111,12 @@ describe('assertConsistent', () => {
       /credential-stuffing/u,
     );
     expect(() => assertConsistent(loadConfig(env({ RATE_LIMIT_AUTH: '300' })))).toThrow(BootError);
+  });
+
+  it('refuses a chat budget at or above the global one', () => {
+    expect(() => assertConsistent(loadConfig(env({ RATE_LIMIT_CHAT: '240' })))).toThrow(
+      /RATE_LIMIT_CHAT \(240\) must be below RATE_LIMIT_GLOBAL \(240\)/u,
+    );
   });
 
   it('refuses an upload budget at or above the global one', () => {

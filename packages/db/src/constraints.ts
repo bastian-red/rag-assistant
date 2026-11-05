@@ -92,6 +92,10 @@ export const CITATION_QUOTE = 'citations_quote_check';
 export const CITATION_PAGE = 'citations_page_check';
 export const TRACE_LATENCY = 'retrieval_traces_latency_check';
 export const TRACE_CANDIDATES = 'retrieval_traces_candidates_check';
+export const TRACE_ABSTAIN_REASON = 'retrieval_traces_abstain_reason_check';
+export const TRACE_BEST_SIMILARITY = 'retrieval_traces_best_similarity_check';
+export const TRACE_DROPPED = 'retrieval_traces_dropped_check';
+export const TRACE_DETAILS = 'retrieval_traces_details_check';
 
 /** The embedding width the `chunks.embedding` column is declared with. */
 export const EMBEDDING_DIMENSIONS = 1024;

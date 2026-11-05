@@ -12,3 +12,4 @@ export * from './llm';
 export * from './library';
 export * from './sources';
 export * from './ingest';
+export * from './chat';

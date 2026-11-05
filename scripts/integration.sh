@@ -60,6 +60,11 @@ FAKE_PORT="${INTEGRATION_FAKE_OLLAMA_PORT:-11535}"
 export CHAT_MODEL="${CHAT_MODEL:-qwen3:4b-instruct}"
 export EMBED_MODEL="${EMBED_MODEL:-qwen3-embedding:0.6b}"
 export OLLAMA_URL="http://127.0.0.1:${FAKE_PORT}"
+# The fake's hashed vectors are their own space with their own calibration:
+# measured in services/retrieval's suite, unrelated text scores about 0.07 and
+# related text 0.16 to 0.35, so the real model's 0.43 would abstain on every
+# question. An explicit value in .env still wins.
+export RETRIEVAL_MIN_SIMILARITY="${RETRIEVAL_MIN_SIMILARITY:-0.12}"
 node services/llm/dist/fake/main.js --port "$FAKE_PORT" --models "${CHAT_MODEL},${EMBED_MODEL}" &
 FAKE_PID=$!
 trap 'kill "$FAKE_PID" 2>/dev/null || true; rm -rf -- "$UPLOAD_DIR"' EXIT

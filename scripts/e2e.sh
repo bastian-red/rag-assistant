@@ -57,6 +57,9 @@ FAKE_PORT="${E2E_FAKE_OLLAMA_PORT:-11536}"
 export OLLAMA_URL="http://127.0.0.1:${FAKE_PORT}"
 # The fake server's port, for the health spec that stops and restarts it.
 export E2E_FAKE_OLLAMA_PORT="$FAKE_PORT"
+# The fake's hashed vectors have their own calibration (integration.sh says
+# why): the real model's 0.43 would make every question an abstention.
+export RETRIEVAL_MIN_SIMILARITY="${RETRIEVAL_MIN_SIMILARITY:-0.12}"
 
 check_reachable() {
   local url="$1" label="$2" host port

@@ -17,6 +17,10 @@ class Probe {
   @Get()
   upload(): void {}
 
+  @Budget('chat')
+  @Get()
+  ask(): void {}
+
   @Get()
   list(): void {}
 }
@@ -28,10 +32,15 @@ function contextFor(handler: keyof Probe): ExecutionContext {
   } as unknown as ExecutionContext;
 }
 
-const CONFIG = { rateLimitGlobal: 240, rateLimitAuth: 5, rateLimitUpload: 10 } as ApiConfig;
+const CONFIG = {
+  rateLimitGlobal: 240,
+  rateLimitAuth: 5,
+  rateLimitUpload: 10,
+  rateLimitChat: 20,
+} as ApiConfig;
 
 describe('throttlers', () => {
-  const [general, auth, upload, ...rest] = throttlers(CONFIG);
+  const [general, auth, upload, chat, ...rest] = throttlers(CONFIG);
 
   it('applies the auth budget to auth routes ONLY', () => {
     // The bug this file exists to prevent: in @nestjs/throttler v6 every named
@@ -47,6 +56,15 @@ describe('throttlers', () => {
     expect(upload!.skipIf!(contextFor('upload'))).toBe(false);
     expect(upload!.skipIf!(contextFor('list'))).toBe(true);
     expect(upload!.skipIf!(contextFor('signIn'))).toBe(true);
+  });
+
+  it('applies the chat budget to the question route ONLY', () => {
+    expect(chat!.limit).toBe(20);
+    expect(chat!.skipIf!(contextFor('ask'))).toBe(false);
+    expect(chat!.skipIf!(contextFor('list'))).toBe(true);
+    expect(chat!.skipIf!(contextFor('upload'))).toBe(true);
+    expect(upload!.skipIf!(contextFor('ask'))).toBe(true);
+    expect(auth!.skipIf!(contextFor('ask'))).toBe(true);
   });
 
   it('registers exactly the budgets it scopes', () => {

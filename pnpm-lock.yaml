@@ -55,12 +55,18 @@ importers:
       '@nestjs/throttler':
         specifier: ^6.5.0
         version: 6.7.1(@nestjs/common@11.2.8(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.8)(reflect-metadata@0.2.2)
+      '@rag/answer':
+        specifier: workspace:*
+        version: link:../../services/answer
       '@rag/db':
         specifier: workspace:*
         version: link:../../packages/db
       '@rag/llm':
         specifier: workspace:*
         version: link:../../services/llm
+      '@rag/retrieval':
+        specifier: workspace:*
+        version: link:../../services/retrieval
       '@rag/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -98,6 +104,9 @@ importers:
       '@nestjs/testing':
         specifier: ^11.2.8
         version: 11.2.8(@nestjs/common@11.2.8(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.8)(@nestjs/platform-express@11.2.8)
+      '@rag/chunker':
+        specifier: workspace:*
+        version: link:../../packages/chunker
       '@rag/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -269,6 +278,40 @@ importers:
       '@types/jsonwebtoken':
         specifier: ^9.0.7
         version: 9.0.10
+      '@types/node':
+        specifier: ^20.17.6
+        version: 20.19.43
+      fast-check:
+        specifier: ^3.23.2
+        version: 3.23.2
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@20.19.43)(terser@5.51.2)
+
+  services/answer:
+    dependencies:
+      '@rag/chunker':
+        specifier: workspace:*
+        version: link:../../packages/chunker
+      '@rag/citations':
+        specifier: workspace:*
+        version: link:../../packages/citations
+      '@rag/retrieval':
+        specifier: workspace:*
+        version: link:../retrieval
+      '@rag/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+    devDependencies:
+      '@rag/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@rag/llm':
+        specifier: workspace:*
+        version: link:../llm
       '@types/node':
         specifier: ^20.17.6
         version: 20.19.43

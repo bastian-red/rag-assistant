@@ -45,7 +45,11 @@ import {
   MESSAGE_ERROR,
   MESSAGE_QUESTION,
   ONE_STREAMING_ANSWER,
+  TRACE_ABSTAIN_REASON,
+  TRACE_BEST_SIMILARITY,
   TRACE_CANDIDATES,
+  TRACE_DETAILS,
+  TRACE_DROPPED,
   TRACE_LATENCY,
   TRACE_MESSAGE_SAME_OWNER,
 } from '../src/constraints';
@@ -500,6 +504,11 @@ describe('CHECKs: each malformed row is refused by name', () => {
   it.each([
     ['a negative latency', { latencyMs: -1 }, TRACE_LATENCY],
     ['candidates that are not a list', { candidates: { top: [] } }, TRACE_CANDIDATES],
+    ['an abstain reason retrieval never gives', { abstainReason: 'tired' }, TRACE_ABSTAIN_REASON],
+    ['a similarity above 1', { bestSimilarity: 1.0001 }, TRACE_BEST_SIMILARITY],
+    ['a similarity below -1', { bestSimilarity: -1.5 }, TRACE_BEST_SIMILARITY],
+    ['dropped markers that are not a list', { dropped: { raw: '[S9]' } }, TRACE_DROPPED],
+    ['details that are not an object', { details: [1, 2] }, TRACE_DETAILS],
   ])('retrieval trace: %s', async (_, overrides, constraint) => {
     const error = await refused(
       db.retrievalTrace.create({
@@ -516,5 +525,36 @@ describe('CHECKs: each malformed row is refused by name', () => {
       }),
     );
     expect(names(error, constraint)).toBe(true);
+  });
+
+  it('accepts a trace of an abstention and one of an answer, with the new columns defaulted', async () => {
+    const base = {
+      ownerId: alma,
+      query: 'Is it serviced?',
+      candidates: [],
+      latencyMs: 12,
+      embedModel: 'qwen3-embedding:0.6b',
+      chatModel: 'qwen3:4b',
+    };
+    const abstained = await db.retrievalTrace.create({
+      data: {
+        ...base,
+        messageId: await newAnswer(alma, almaThread),
+        abstainReason: 'below_threshold',
+        bestSimilarity: -1,
+        dropped: [{ raw: '[S9]', labels: [9] }],
+        details: { promptVersion: 1 },
+      },
+    });
+    expect(abstained.bestSimilarity).toBe(-1);
+    const plain = await db.retrievalTrace.create({
+      data: { ...base, messageId: await newAnswer(alma, almaThread) },
+    });
+    expect(plain).toMatchObject({
+      abstainReason: null,
+      bestSimilarity: null,
+      dropped: [],
+      details: {},
+    });
   });
 });

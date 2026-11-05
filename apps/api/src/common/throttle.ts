@@ -38,9 +38,10 @@ export const BUDGET = 'rag:budget';
 
 /**
  * `auth`: sign-in, keyed by address. `upload`: `POST /documents`, keyed by
- * person. Each limits only the routes that name it.
+ * person. `chat`: a question, which runs the model, keyed by person. Each
+ * limits only the routes that name it.
  */
-export type BudgetName = 'auth' | 'upload';
+export type BudgetName = 'auth' | 'upload' | 'chat';
 
 /** Opt a route into a special budget, on top of the general one. */
 export const Budget = (name: BudgetName): MethodDecorator => SetMetadata(BUDGET, name);
@@ -84,6 +85,12 @@ export function throttlers(config: ApiConfig): ThrottlerOptions[] {
       name: 'upload',
       limit: config.rateLimitUpload,
       skipIf: (context) => budgetOf(context) !== 'upload',
+    },
+    {
+      ...common,
+      name: 'chat',
+      limit: config.rateLimitChat,
+      skipIf: (context) => budgetOf(context) !== 'chat',
     },
   ];
 }

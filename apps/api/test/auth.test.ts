@@ -90,9 +90,12 @@ describe('the session guard is default-closed', () => {
     // this test, which is the moment to decide whether it is public.
     expect(routes(h)).toEqual([
       'DELETE /collections/:id',
+      'DELETE /conversations/:id',
       'DELETE /documents/:id',
       'GET /auth/me',
       'GET /collections',
+      'GET /conversations',
+      'GET /conversations/:id',
       'GET /documents',
       'GET /documents/:id',
       'GET /documents/:id/chunks/:chunkId',
@@ -101,7 +104,9 @@ describe('the session guard is default-closed', () => {
       'GET /health',
       'GET /status',
       'POST /auth/sign-in',
+      'POST /chat/:conversationId/messages',
       'POST /collections',
+      'POST /conversations',
       'POST /documents',
     ]);
   });

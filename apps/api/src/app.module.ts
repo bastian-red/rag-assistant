@@ -5,8 +5,8 @@
  *
  * 1. `SessionGuard`: every route needs a service token unless `@Public()`.
  * 2. `ThrottlerGuard`: the general budget everywhere, keyed by user or by
- *    address (so the session guard must run first); `auth` and `upload` add
- *    stricter ones where `@Budget` asks; health and status skip.
+ *    address (so the session guard must run first); `auth`, `upload` and
+ *    `chat` add stricter ones where `@Budget` asks; health and status skip.
  *
  * There is no role guard: every user owns a private library and nothing else,
  * so authorisation is an owner filter in each query, tested per feature.
@@ -19,8 +19,12 @@ import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis'
 import { API_CONFIG, type ApiConfig } from './config/config';
 import { AuthController } from './auth/auth.controller';
 import { AuthService } from './auth/auth.service';
+import { ChatController } from './chat/chat.controller';
+import { ChatService } from './chat/chat.service';
 import { CollectionsController } from './collections/collections.controller';
 import { CollectionsService } from './collections/collections.service';
+import { ConversationsController } from './conversations/conversations.controller';
+import { ConversationsService } from './conversations/conversations.service';
 import { DomainErrorFilter } from './common/domain-error.filter';
 import { DocumentsController } from './documents/documents.controller';
 import { DocumentsService } from './documents/documents.service';
@@ -45,14 +49,18 @@ import { StatusController } from './status/status.controller';
   ],
   controllers: [
     AuthController,
+    ChatController,
     CollectionsController,
+    ConversationsController,
     DocumentsController,
     HealthController,
     StatusController,
   ],
   providers: [
     AuthService,
+    ChatService,
     CollectionsService,
+    ConversationsService,
     DocumentsService,
     HealthService,
     // Registration order is execution order.

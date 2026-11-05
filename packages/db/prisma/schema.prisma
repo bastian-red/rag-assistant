@@ -248,15 +248,23 @@ model Citation {
 /// What retrieval saw for one answer: the query, every candidate with its
 /// scores, and the timings. Kept so an answer can be audited after the fact.
 model RetrievalTrace {
-  id         String   @id @default(cuid())
-  ownerId    String   @map("owner_id")
-  messageId  String   @unique(map: "retrieval_traces_message_id_key") @map("message_id")
-  query      String
-  candidates Json
-  latencyMs  Int      @map("latency_ms")
-  embedModel String   @map("embed_model")
-  chatModel  String   @map("chat_model")
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  id             String   @id @default(cuid())
+  ownerId        String   @map("owner_id")
+  messageId      String   @unique(map: "retrieval_traces_message_id_key") @map("message_id")
+  query          String
+  candidates     Json
+  latencyMs      Int      @map("latency_ms")
+  embedModel     String   @map("embed_model")
+  chatModel      String   @map("chat_model")
+  /// Why the chat model was not called (`no_candidates`, `below_threshold`); null when it was.
+  abstainReason  String?  @map("abstain_reason")
+  /// The best cosine similarity the abstain rule compared; null in text mode or with no candidates.
+  bestSimilarity Float?   @map("best_similarity")
+  /// Markers that named no packed source, as written: `[{raw, labels}]` (SPECS #2).
+  dropped        Json     @default("[]")
+  /// Options, timings, model usage and prompt shape of the run, for audit.
+  details        Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   owner   User    @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "retrieval_traces_owner_id_fkey")
   /// Composite: the answer must be the same person's.

@@ -48,6 +48,14 @@ export function assertConsistent(config: ApiConfig): void {
         'a budget at or above the general one is not a limit.',
     );
   }
+  // A question runs the chat model for up to minutes of CPU: the same rule.
+  if (config.rateLimitChat >= config.rateLimitGlobal) {
+    throw new BootError(
+      `RATE_LIMIT_CHAT (${String(config.rateLimitChat)}) must be below RATE_LIMIT_GLOBAL ` +
+        `(${String(config.rateLimitGlobal)}). A question runs the model; a budget at or above ` +
+        'the general one is not a limit.',
+    );
+  }
 }
 
 export function assertBootable(config: ApiConfig): void {
