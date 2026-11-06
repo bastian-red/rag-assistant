@@ -6,7 +6,8 @@
  * No worker runs in this lane: a document stays QUEUED, and the job it got is
  * read straight off the BullMQ queue.
  */
-import { access } from 'node:fs/promises';
+import { access, readdir, readFile } from 'node:fs/promises';
+import { request as httpRequest } from 'node:http';
 import { join } from 'node:path';
 
 import {
@@ -18,13 +19,14 @@ import {
   chunkViewSchema,
   type IngestEvent,
 } from '@rag/shared';
-import { sha256Of } from '@rag/shared/server';
+import { INCOMING_DIR, sha256Of } from '@rag/shared/server';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { IngestEventsService } from '../src/infra/ingest-events.service';
 import { AUTH_SECRET, REDIS_URL, boot, call, newUser, upload, type Harness } from './support';
+import { until } from './chat-support';
 import { mintServiceToken } from '@rag/shared/server';
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR!;
@@ -60,6 +62,13 @@ async function person(label: string) {
   expect(shelf.status).toBe(201);
   return { user, collectionId: shelf.body.id };
 }
+
+/** What is waiting in the staging folder; the API must leave it empty. */
+const incoming = () =>
+  readdir(join(UPLOAD_DIR, INCOMING_DIR)).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  });
 
 const stored = (ownerId: string, sha: string) =>
   access(join(UPLOAD_DIR, ownerId, sha)).then(
@@ -142,6 +151,9 @@ describe('POST /documents', () => {
       document: { id: first.document.id, status: 'QUEUED', error: null },
     });
     expect(await queue.getJob(first.document.id)).toBeDefined();
+    // The second upload's staged file became the stored one.
+    expect(await stored(user.id, sha256Of(bytes))).toBe(true);
+    expect(await incoming()).toEqual([]);
   });
 
   it('refuses a .pdf that is not a PDF by its bytes, 415, storing nothing (SPECS #7)', async () => {
@@ -155,6 +167,7 @@ describe('POST /documents', () => {
     });
     expect(await h.db.document.count({ where: { ownerId: user.id } })).toBe(0);
     expect(await stored(user.id, sha256Of(bytes))).toBe(false);
+    expect(await incoming()).toEqual([]);
   });
 
   it('refuses a file over the size cap, 413, before it reaches the service (SPECS #7)', async () => {
@@ -164,13 +177,51 @@ describe('POST /documents', () => {
     expect(r.status).toBe(413);
     expect(r.body).toMatchObject({ code: 'TOO_LARGE' });
     expect(await h.db.document.count({ where: { ownerId: user.id } })).toBe(0);
-    // Exactly at the cap is accepted.
-    const atCap = await upload(h, user, {
-      collectionId,
-      filename: 'cap.txt',
-      bytes: new Uint8Array(LIMITS.uploadBytes).fill(0x62),
-    });
+    // The part that streamed before the cap was hit is not left staged.
+    expect(await incoming()).toEqual([]);
+    // Exactly at the cap is accepted, and the stored file is those bytes.
+    const cap = new Uint8Array(LIMITS.uploadBytes).fill(0x62);
+    const atCap = await upload(h, user, { collectionId, filename: 'cap.txt', bytes: cap });
     expect(atCap.status).toBe(202);
+    const kept = await readFile(join(UPLOAD_DIR, user.id, sha256Of(cap)));
+    expect(sha256Of(kept)).toBe(sha256Of(cap));
+    expect(await incoming()).toEqual([]);
+  });
+
+  it('streams to disk: a request that hangs up mid-file leaves nothing staged or stored', async () => {
+    const { user, collectionId } = await person('cut');
+    const boundary = 'cutboundary';
+    const head =
+      `--${boundary}\r\nContent-Disposition: form-data; name="collectionId"\r\n\r\n${collectionId}\r\n` +
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="cut.txt"\r\n` +
+      'Content-Type: text/plain\r\n\r\n';
+    const url = new URL('/documents', h.base);
+    const req = httpRequest(url, {
+      method: 'POST',
+      headers: {
+        'content-type': `multipart/form-data; boundary=${boundary}`,
+        authorization: `Bearer ${mintServiceToken(user, AUTH_SECRET)}`,
+        'x-forwarded-for': `198.51.100.${String(serial % 250)}`,
+      },
+    });
+    req.on('error', () => undefined);
+    req.write(head);
+    req.write(Buffer.alloc(256 * 1024, 0x63));
+    // The file part has started arriving: multer has staged it.
+    await until('the part to be staged', incoming, (files) => files.length === 1);
+    req.destroy();
+    await until('the staged part to be removed', incoming, (files) => files.length === 0);
+    expect(await h.db.document.count({ where: { ownerId: user.id } })).toBe(0);
+    expect(await readdir(join(UPLOAD_DIR, user.id)).catch(() => [])).toEqual([]);
+  });
+
+  it('drops the staged file when the bytes are already a live document', async () => {
+    const { user, collectionId } = await person('staged-dup');
+    const bytes = unique('staged-dup');
+    await upload(h, user, { collectionId, filename: 's.md', bytes });
+    expect((await upload(h, user, { collectionId, filename: 's.md', bytes })).status).toBe(200);
+    expect(await incoming()).toEqual([]);
+    expect(await readdir(join(UPLOAD_DIR, user.id))).toEqual([sha256Of(bytes)]);
   });
 
   it('is 404 for a collection that is not yours, and 400 with no collection', async () => {
@@ -184,6 +235,7 @@ describe('POST /documents', () => {
     });
     expect(r.status).toBe(404);
     expect(await stored(stranger.user.id, sha256Of(bytes))).toBe(false);
+    expect(await incoming()).toEqual([]);
     const none = await upload(h, stranger.user, { filename: 'x.md', bytes });
     expect(none.status).toBe(400);
   });

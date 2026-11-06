@@ -13,6 +13,7 @@
  */
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { Module } from '@nestjs/common';
+import { MulterModule } from '@nestjs/platform-express';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 
@@ -28,6 +29,7 @@ import { ConversationsService } from './conversations/conversations.service';
 import { DomainErrorFilter } from './common/domain-error.filter';
 import { DocumentsController } from './documents/documents.controller';
 import { DocumentsService } from './documents/documents.service';
+import { uploadStorage } from './documents/upload-storage';
 import { SessionGuard } from './common/session.guard';
 import { throttlers } from './common/throttle';
 import { HealthController } from './health/health.controller';
@@ -45,6 +47,12 @@ import { StatusController } from './status/status.controller';
         throttlers: throttlers(config),
         storage: new ThrottlerStorageRedisService(redis.client),
       }),
+    }),
+    // Uploads stream to UPLOAD_DIR/.incoming instead of multer's default
+    // memory buffer; FileInterceptor's own options (the limits) merge on top.
+    MulterModule.registerAsync({
+      inject: [API_CONFIG],
+      useFactory: (config: ApiConfig) => ({ storage: uploadStorage(config.uploadDir) }),
     }),
   ],
   controllers: [

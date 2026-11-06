@@ -8,7 +8,7 @@
 # BuildKit keys its cache on the instructions, so the images share one fetched store and one installed node_modules (about
 # 1 GB) instead of building two of them: a 12 GB Docker disk ran out on the
 # second copy. The runtime stage below starts from a clean image either way.
-FROM node:20-bookworm-slim AS base
+FROM node:24.22.2-bookworm-slim AS base
 RUN apt-get update -qq \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
@@ -43,7 +43,7 @@ RUN test -f apps/web/.next/standalone/apps/web/server.js || \
   (echo "build: expected apps/web/.next/standalone/apps/web/server.js. Found:" >&2 \
    && find apps/web/.next/standalone -maxdepth 3 >&2 && exit 1)
 
-FROM node:20-bookworm-slim AS runtime
+FROM node:24.22.2-bookworm-slim AS runtime
 RUN groupadd --gid 1001 app \
   && useradd --uid 1001 --gid app --shell /usr/sbin/nologin --no-create-home app
 WORKDIR /app

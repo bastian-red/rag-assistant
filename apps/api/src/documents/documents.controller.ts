@@ -129,10 +129,10 @@ export class DocumentsController {
       'content-security-policy': "sandbox; default-src 'none'",
       'cache-control': 'private, no-store',
     });
-    return new StreamableFile(file.bytes, {
+    return new StreamableFile(file.stream, {
       type: file.mime === 'application/pdf' ? 'application/pdf' : `${file.mime}; charset=utf-8`,
       disposition: `inline; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
-      length: file.bytes.byteLength,
+      length: file.bytes,
     });
   }
 

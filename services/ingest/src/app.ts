@@ -6,6 +6,7 @@
 import { createPrismaClient } from '@rag/db';
 import { createOllama } from '@rag/llm';
 import { INGEST_QUEUE } from '@rag/shared';
+import { sweepUploads } from '@rag/shared/server';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 
@@ -13,6 +14,7 @@ import type { IngestConfig } from './config';
 import { redisPublisher } from './events';
 import { healthReporter, startHealthServer } from './health';
 import { reconcile } from './reconcile';
+import { knownUploads } from './store';
 import { startWorker } from './worker';
 
 export interface RunningIngest {
@@ -59,6 +61,16 @@ export async function startIngest(
     } else if (found.stale > 0) {
       log(
         `[ingest] queued ${String(found.stale)} document(s) embedded in another space than ${space ?? ''}, found ${when}`,
+      );
+    }
+    // Files no row names: a crash or a failed insert between the API's rename
+    // and its insert, or a staged upload whose connection died.
+    const files = await sweepUploads(config.uploadDir, (owner, shas) =>
+      knownUploads(prisma, owner, shas),
+    );
+    if (files.orphans + files.partials > 0) {
+      log(
+        `[ingest] removed ${String(files.orphans)} stored file(s) with no document and ${String(files.partials)} partial upload(s), found ${when}`,
       );
     }
   };

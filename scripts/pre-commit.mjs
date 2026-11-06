@@ -15,6 +15,9 @@
  *   4. self-import.mjs            — a package importing itself by name resolves
  *      to its own dist/, which works on any machine that has built once and
  *      fails on a clean checkout. Only CI would see it otherwise.
+ *   4b. node-pin.mjs              — one Node version in .nvmrc, .npmrc, every
+ *      Dockerfile stage, every setup-node step and engines; a stage left behind
+ *      would ship the old runtime past every local lane.
  *   4c. wait-for-api --self-test  — `pnpm dev` holds Next until the API answers;
  *      a wait that returns at once brings back the 500 on the first page.
  *   5. frozen lockfile           — CI installs with --frozen-lockfile, so a
@@ -64,6 +67,18 @@ const steps = [
     name: 'invisible characters',
     cmd: 'node',
     args: ['scripts/invisible-chars.mjs'],
+    required: true,
+  },
+  {
+    name: 'node pin (self-test)',
+    cmd: 'node',
+    args: ['scripts/node-pin.mjs', '--self-test'],
+    required: true,
+  },
+  {
+    name: 'node pin',
+    cmd: 'node',
+    args: ['scripts/node-pin.mjs'],
     required: true,
   },
   {

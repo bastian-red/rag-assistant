@@ -33,6 +33,9 @@ set -m
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+# The pinned Node (.nvmrc), as `pnpm dev` would get it; this script strips
+# .env but not PATH, so it does not undo what it tests.
+. scripts/use-node.sh
 
 LOG="${LOG:-/tmp/rag-dev-smoke.log}"
 COOKIES="$(mktemp -t rag-dev-smoke-cookies.XXXXXX)"

@@ -7,7 +7,7 @@
 # way it is). Run as many replicas as the model server can feed: BullMQ hands
 # each job to one of them, and a replica killed mid-job is picked up by another.
 
-FROM node:20-bookworm-slim AS base
+FROM node:24.22.2-bookworm-slim AS base
 # openssl: Prisma's query engine links against it, and bookworm-slim ships without.
 RUN apt-get update -qq \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
@@ -52,7 +52,7 @@ RUN test -f /prod/ingest/node_modules/unpdf/package.json || \
   (echo "prod-deps: unpdf is missing after pnpm deploy." >&2 && exit 1)
 
 # --- runtime ---------------------------------------------------------------
-FROM node:20-bookworm-slim AS runtime
+FROM node:24.22.2-bookworm-slim AS runtime
 RUN apt-get update -qq \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/* \

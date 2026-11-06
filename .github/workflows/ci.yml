@@ -39,7 +39,7 @@ jobs:
           version: 9.15.0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:generate
@@ -51,6 +51,8 @@ jobs:
       - run: pnpm scan:invisible
       - run: pnpm scan:self-import:self-test
       - run: node scripts/wait-for-api.mjs --self-test
+      - run: pnpm scan:node-pin:self-test
+      - run: pnpm scan:node-pin
       - run: pnpm scan:self-import
       - name: Install gitleaks
         shell: bash
@@ -78,7 +80,7 @@ jobs:
           version: 9.15.0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:generate
@@ -118,7 +120,7 @@ jobs:
           version: 9.15.0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:generate
@@ -145,7 +147,7 @@ jobs:
           version: 9.15.0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Set up .env the way the README says
@@ -188,7 +190,7 @@ jobs:
           version: 9.15.0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:generate

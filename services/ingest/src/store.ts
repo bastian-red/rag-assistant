@@ -156,6 +156,23 @@ export async function unfinishedDocuments(
   });
 }
 
+/**
+ * Which of `sha256s` one owner has a document row for, in any state: the
+ * question `sweepUploads` asks before it removes a stored file. A FAILED row
+ * still names its file (an upload of the same bytes re-queues it).
+ */
+export async function knownUploads(
+  prisma: PrismaClient,
+  ownerId: string,
+  sha256s: readonly string[],
+): Promise<ReadonlySet<string>> {
+  const rows = await prisma.document.findMany({
+    where: { ownerId, sha256: { in: [...sha256s] } },
+    select: { sha256: true },
+  });
+  return new Set(rows.map((row) => row.sha256));
+}
+
 /** READY documents holding any chunk embedded in a space other than `space`. */
 export async function staleDocuments(
   prisma: PrismaClient,

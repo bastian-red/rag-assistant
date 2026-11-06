@@ -5,10 +5,12 @@
  * chunks").
  */
 import { spawn, type ChildProcess } from 'node:child_process';
+import { access, utimes } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { chunkDocument } from '@rag/chunker';
 import { healthSchema, ingestJobOptions, INGEST_QUEUE } from '@rag/shared';
+import { storedFilePath, writeStoredFile } from '@rag/shared/server';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -154,6 +156,35 @@ describe('chunks from another vector space', () => {
     await new Promise((resolve) => setTimeout(resolve, 2_500));
     expect(await fakeEmbedCalls()).toBe(before);
     expect(await statusOf(job.documentId)).toBe('READY');
+  });
+});
+
+describe('stored files no row names', () => {
+  const exists = (path: string) =>
+    access(path).then(
+      () => true,
+      () => false,
+    );
+  const age = async (path: string) => {
+    const old = new Date(Date.now() - 60 * 60_000);
+    await utimes(path, old, old);
+  };
+
+  it('are removed by the sweep once past the grace, and a document’s own file is kept', async () => {
+    const person = await newPerson('orphan');
+    const job = await addDocument(person, 'kept.md', encode(longMarkdown(1)));
+    const keptPath = storedFilePath(config.uploadDir, person.id, job.sha256);
+    await age(keptPath);
+    // What a failed insert after the API's rename leaves: a file, no row.
+    const orphan = await writeStoredFile(config.uploadDir, person.id, encode('# No row\n'));
+    await age(orphan.path);
+    const fresh = await writeStoredFile(config.uploadDir, person.id, encode('# Row on its way\n'));
+
+    await start({ sweepMs: 1_000 });
+    await eventually('the orphan to be removed', async () => !(await exists(orphan.path)));
+    expect(await exists(keptPath)).toBe(true);
+    // Inside the grace: an upload between its rename and its insert.
+    expect(await exists(fresh.path)).toBe(true);
   });
 });
 

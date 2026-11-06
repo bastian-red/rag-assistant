@@ -12,4 +12,7 @@ docs
 .env.*
 !.env.example
 **/demo-shots
+# The image IS the pinned Node (FROM tag, checked by scripts/node-pin.mjs);
+# with .npmrc inside, pnpm would download a second copy during the build.
+.npmrc
 assets

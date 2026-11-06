@@ -5,7 +5,7 @@
 #
 # The same image serves every replica.
 
-FROM node:20-bookworm-slim AS base
+FROM node:24.22.2-bookworm-slim AS base
 # openssl: Prisma's query engine links against it, and bookworm-slim ships without.
 RUN apt-get update -qq \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
@@ -47,7 +47,7 @@ RUN test -d /prod/api/node_modules/@rag/db/generated/client || \
   (echo "prod-deps: the generated Prisma client did not survive pnpm deploy." >&2 && exit 1)
 
 # --- runtime ---------------------------------------------------------------
-FROM node:20-bookworm-slim AS runtime
+FROM node:24.22.2-bookworm-slim AS runtime
 RUN apt-get update -qq \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/* \

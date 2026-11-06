@@ -4,7 +4,7 @@
   "private": true,
   "packageManager": "pnpm@9.15.0",
   "engines": {
-    "node": ">=20"
+    "node": ">=24.22.2 <25"
   },
   "scripts": {
     "build": "turbo run build",
@@ -26,6 +26,8 @@
     "scan:invisible:self-test": "node scripts/invisible-chars.mjs --self-test",
     "scan:self-import": "node scripts/self-import.mjs",
     "scan:self-import:self-test": "node scripts/self-import.mjs --self-test",
+    "scan:node-pin": "node scripts/node-pin.mjs",
+    "scan:node-pin:self-test": "node scripts/node-pin.mjs --self-test",
     "scan:secrets": "gitleaks detect --no-banner --redact --config .gitleaks.toml",
     "format": "prettier --write \"**/*.{ts,tsx,js,cjs,mjs,json,md}\"",
     "prepare": "node scripts/install-hooks.mjs",

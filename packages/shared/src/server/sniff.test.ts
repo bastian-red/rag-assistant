@@ -1,6 +1,19 @@
+import { createHash } from 'node:crypto';
+
+import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
-import { extensionOf, sniffType } from './sniff';
+import {
+  HEAD_BYTES,
+  TITLE_CHARS,
+  createInspector,
+  extensionOf,
+  inspect,
+  isPdf,
+  isUtf8Text,
+  sniffInspection,
+  sniffType,
+} from './sniff';
 
 const text = (s: string) => new TextEncoder().encode(s);
 const pdf = text('%PDF-1.4\n1 0 obj\n<< >>\nendobj\n');
@@ -67,5 +80,64 @@ describe('extensionOf', () => {
   it('reads the last extension, lower-cased', () => {
     expect(extensionOf('a.b.PDF')).toBe('pdf');
     expect(extensionOf('noext')).toBe('');
+  });
+});
+
+describe('createInspector (an upload judged as it streams)', () => {
+  // Bytes that exercise every branch: text with multi-byte characters (so a
+  // cut can land inside one), NULs, invalid UTF-8, a PDF header after junk.
+  const piece = fc.oneof(
+    fc.string({ unit: 'grapheme', maxLength: 40 }).map((s) => new TextEncoder().encode(s)),
+    fc.uint8Array({ maxLength: 40 }),
+    fc.constant(new TextEncoder().encode('%PDF-1.7\n')),
+    fc.constant(Uint8Array.from([0xe2, 0x82, 0xac])),
+  );
+  const file = fc.array(piece, { maxLength: 12 }).map((parts) => Buffer.concat(parts));
+  const cuts = (length: number) =>
+    fc.uniqueArray(fc.integer({ min: 0, max: Math.max(0, length) }), { maxLength: 6 });
+
+  it('reaches the same inspection however the stream is cut', () => {
+    fc.assert(
+      fc.property(
+        file.chain((bytes) => fc.tuple(fc.constant(bytes), cuts(bytes.length))),
+        ([bytes, at]) => {
+          const inspector = createInspector();
+          let from = 0;
+          for (const to of [...at].sort((a, b) => a - b).concat(bytes.length)) {
+            inspector.push(bytes.subarray(from, to));
+            from = to;
+          }
+          expect(inspector.finish()).toEqual(inspect(bytes));
+        },
+      ),
+    );
+  });
+
+  it('judges a streamed file exactly as the whole-buffer checks do', () => {
+    fc.assert(
+      fc.property(file, fc.constantFrom('a.pdf', 'a.md', 'a.txt'), (bytes, name) => {
+        const seen = inspect(bytes);
+        expect(seen.sha256).toBe(createHash('sha256').update(bytes).digest('hex'));
+        expect(seen.bytes).toBe(bytes.length);
+        expect(isPdf(seen.head)).toBe(isPdf(bytes));
+        expect(!seen.hasNul && seen.utf8).toBe(isUtf8Text(bytes));
+        expect(sniffInspection(name, seen)).toEqual(sniffType(name, bytes));
+      }),
+    );
+  });
+
+  it('keeps a bounded head and title window, never the whole file', () => {
+    const big = Buffer.alloc(5 * 1024 * 1024, 'a');
+    const inspector = createInspector();
+    for (let i = 0; i < big.length; i += 65_536) inspector.push(big.subarray(i, i + 65_536));
+    const seen = inspector.finish();
+    expect(seen.bytes).toBe(big.length);
+    expect(seen.head.length).toBe(HEAD_BYTES);
+    expect(seen.leadingText.length).toBe(TITLE_CHARS);
+  });
+
+  it('drops the text window once the bytes stop being UTF-8', () => {
+    const seen = inspect(Buffer.concat([Buffer.from('# Title\n'), Buffer.from([0xff])]));
+    expect(seen).toMatchObject({ utf8: false, leadingText: '' });
   });
 });

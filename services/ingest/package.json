@@ -20,12 +20,12 @@
     "@rag/shared": "workspace:*",
     "bullmq": "6.5.4",
     "ioredis": "^5.4.2",
-    "unpdf": "1.7.0",
+    "unpdf": "2.1.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@rag/config": "workspace:*",
-    "@types/node": "^20.17.6",
+    "@types/node": "^24.19.2",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"

@@ -40,3 +40,6 @@ load_env_file .env.example
 if [[ -n "${UPLOAD_DIR:-}" && "${UPLOAD_DIR}" != /* ]]; then
   export UPLOAD_DIR="$PWD/${UPLOAD_DIR#./}"
 fi
+
+# Every lane script sources this file, so the Node pin rides along with it.
+. scripts/use-node.sh
