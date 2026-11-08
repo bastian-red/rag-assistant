@@ -7,7 +7,7 @@ reads Postgres and asks `services/llm` for one query embedding.
 query -> embed (with the model's query instruction)
       -> vector top 40 (HNSW, cosine) + text top 40 (Postgres full text, OR of stems)   same scope
       -> reciprocal rank fusion (k = 60) -> top 6 distinct -> overlapping neighbours merged
-      -> packed under 3,200 tokens as [S1]..[Sn] -> abstain below similarity 0.43
+      -> packed under 2,200 tokens as [S1]..[Sn] -> abstain below similarity 0.43
 ```
 
 ```ts

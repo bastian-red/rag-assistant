@@ -138,8 +138,9 @@ if (process.argv.includes('--self-test')) {
  * switches for a test run passed on the command line, not configuration the
  * application consumes. Folding them in would force them into .env.example and
  * turbo.json, which would make both files lie about what configures the product.
+ * evals/ is in: it reads the product's own names plus EVAL_JUDGE_MODEL.
  */
-const SOURCE_DIRS = ['apps', 'packages', 'services'];
+const SOURCE_DIRS = ['apps', 'packages', 'services', 'evals'];
 // `test/` and `loadtest/` hold the integration and load lanes, which are driven
 // by scripts (integration.sh, loadtest.sh) that set their own switches
 // (REDIRECT_TEST_URL, LOADTEST_TARGET) on the command line, never through turbo.

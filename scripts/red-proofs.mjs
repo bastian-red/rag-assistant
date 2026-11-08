@@ -555,6 +555,63 @@ const PROOFS = [
     to: '',
     suite: ['integration', 'chat'],
   },
+  // --- the eval lane's own arithmetic (evals/) ------------------------------
+  {
+    name: 'eval threshold chosen on the questions it is scored on',
+    file: 'evals/src/run.ts',
+    from: "const dev = hybrid.filter((r) => r.split === 'dev').map(toRow);",
+    to: 'const dev = hybrid.map(toRow);',
+    suite: ['unit', '@rag/evals'],
+  },
+  {
+    name: 'eval correct abstention counted over answerable questions',
+    file: 'evals/src/metrics.ts',
+    from: 'correctAbstention: share(unanswerable),',
+    to: 'correctAbstention: share(answerable),',
+    suite: ['unit', '@rag/evals'],
+  },
+  {
+    name: 'eval faithfulness not corrected for the judge errors',
+    file: 'evals/src/metrics.ts',
+    from: 'return Math.min(1, Math.max(0, (observed + judge.tnr - 1) / denominator));',
+    to: 'return Math.min(1, Math.max(0, observed));',
+    suite: ['unit', '@rag/evals'],
+  },
+  {
+    name: 'eval judge reply with a doubled claim read as a verdict',
+    file: 'evals/src/judge.ts',
+    from: 'if (v.claim > claims || out[v.claim - 1] !== undefined) return null;',
+    to: 'if (v.claim > claims) return null;',
+    suite: ['unit', '@rag/evals'],
+  },
+  {
+    name: 'eval false abstention ceiling read as a floor',
+    file: 'evals/src/report.ts',
+    from: 'pass: value !== null && value <= ceiling,',
+    to: 'pass: value !== null && value >= ceiling,',
+    suite: ['unit', '@rag/evals'],
+  },
+  {
+    name: 'eval precision judged part not corrected',
+    file: 'evals/src/metrics.ts',
+    from: 'const share = corrected(judgedSupporting / judged, judge);',
+    to: 'const share = judgedSupporting / judged;',
+    suite: ['unit', '@rag/evals'],
+  },
+  {
+    name: 'eval judge corrected by its short-passage score',
+    file: 'evals/src/run.ts',
+    from: 'long: agreement(rows.filter((r) => r.long)),',
+    to: 'long: agreement(rows),',
+    suite: ['unit', '@rag/evals'],
+  },
+  {
+    name: 'answer prompt example cites once at the end',
+    file: 'services/answer/src/prompt.ts',
+    from: 'opens at 9:00 [S2].',
+    to: 'opens at 9:00.',
+    suite: ['unit', '@rag/answer'],
+  },
 ];
 
 const filters = process.argv.slice(2);

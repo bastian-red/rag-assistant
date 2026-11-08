@@ -11,7 +11,7 @@
  * Throws `IngestRefusal` when the file is the problem and anything else when
  * the world is (the worker decides about retries; see `worker.ts`).
  */
-import { chunkDocument, type ChunkInput } from '@rag/chunker';
+import { chunkDocument, type ChunkInput, type ChunkOptions } from '@rag/chunker';
 import type { PrismaClient } from '@rag/db';
 import { INGEST_FAILURES, type IngestEvent, type IngestJob } from '@rag/shared';
 import { readStoredFile, sha256Of } from '@rag/shared/server';
@@ -36,6 +36,12 @@ export interface PipelineDeps {
   /** Passages per embed call, and so per progress event. */
   readonly batchSize?: number;
   readonly now?: () => Date;
+  /**
+   * The chunker's sizes. The worker never sets them (the chunker's defaults
+   * are the product); the eval lane does, to measure a chunk size before it
+   * becomes the default.
+   */
+  readonly chunkOptions?: ChunkOptions;
 }
 
 export type Outcome =
@@ -85,7 +91,7 @@ export async function ingestDocument(job: IngestJob, deps: PipelineDeps): Promis
   if (sha256Of(bytes) !== doc.sha256) throw new IngestRefusal(INGEST_FAILURES.fileChanged);
 
   const parsed = await parseFile(doc.mime, bytes);
-  const chunked = chunkDocument(chunkInput(parsed));
+  const chunked = chunkDocument(chunkInput(parsed), deps.chunkOptions);
   if (chunked.chunks.length === 0) {
     throw new IngestRefusal(
       parsed.format === 'pdf' ? INGEST_FAILURES.noTextLayer : INGEST_FAILURES.empty,

@@ -13,6 +13,7 @@ import {
   type ChatStreamEvent,
   type ConversationSummary,
 } from '@rag/shared';
+import { PROMPT_VERSION } from '@rag/answer';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { ORPHAN_ERROR } from '../src/conversations/conversations.service';
@@ -157,7 +158,11 @@ describe('POST /chat/:id/messages: an answer', () => {
     expect(trace.bestSimilarity).toBeGreaterThanOrEqual(
       Number(process.env.RETRIEVAL_MIN_SIMILARITY),
     );
-    expect(trace.details).toMatchObject({ status: 'DONE', promptVersion: 1, historyExchanges: 0 });
+    expect(trace.details).toMatchObject({
+      status: 'DONE',
+      promptVersion: PROMPT_VERSION,
+      historyExchanges: 0,
+    });
     const candidates = trace.candidates as { chunkId: string; marker: number | null }[];
     expect(candidates.map((c) => c.chunkId)).toEqual(doc.chunkIds);
     expect(candidates[0]!.marker).toBe(1);

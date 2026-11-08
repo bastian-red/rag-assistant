@@ -22,6 +22,17 @@
 #
 # Models come from .env (CHAT_MODEL, EMBED_MODEL), falling back to
 # .env.example, so this pulls exactly what the app will ask for.
+#
+# The server it starts uses an integrated GPU when there is one
+# (OLLAMA_IGPU_ENABLE=1; Ollama drops iGPUs by default). Measured with
+# scripts/model-bench.mjs on an i5-1135G7 / Iris Xe, a 2,819-token prompt:
+#
+#   CPU only    first token 169 s   prompt  16.7 tok/s   decode 2.5 tok/s
+#   Iris Xe     first token  36 s   prompt  79   tok/s   decode 5.6 tok/s
+#
+# Flash attention changed nothing measurable there, so it is left at its
+# default. Set OLLAMA_IGPU_ENABLE=0 before running this to keep a weaker
+# iGPU out, and measure your own machine with the bench.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -110,7 +121,8 @@ if ! reachable; then
     say "Starting 'ollama serve' on ${host_port} (log: ${LOG})"
     mkdir -p "$(dirname "$LOG")"
     # setsid + nohup: the server outlives this script and the terminal.
-    OLLAMA_HOST="$host_port" setsid nohup "$BIN" serve >>"$LOG" 2>&1 < /dev/null &
+    OLLAMA_HOST="$host_port" OLLAMA_IGPU_ENABLE="${OLLAMA_IGPU_ENABLE:-1}" \
+      setsid nohup "$BIN" serve >>"$LOG" 2>&1 < /dev/null &
     for _ in $(seq 1 60); do reachable && break; sleep 0.5; done
     reachable || fail "the server did not answer at ${URL} within 30 s. See ${LOG}."
   fi

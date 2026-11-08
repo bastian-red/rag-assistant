@@ -14,6 +14,7 @@
     "test": "turbo run test",
     "test:integration": "./scripts/integration.sh",
     "test:e2e": "./scripts/e2e.sh",
+    "evals": "./scripts/evals.sh",
     "db:generate": "pnpm --filter @rag/db generate",
     "db:migrate": "./scripts/with-env.sh pnpm --filter @rag/db migrate:dev",
     "db:deploy": "./scripts/with-env.sh turbo run migrate:deploy --filter=@rag/db",

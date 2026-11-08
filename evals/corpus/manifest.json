@@ -1,0 +1,137 @@
+{
+  "version": 1,
+  "documents": [
+    {
+      "file": "espresso.md",
+      "title": "Espresso",
+      "mime": "text/markdown",
+      "license": "CC BY-SA 4.0 (Wikipedia contributors)",
+      "source": "https://en.wikipedia.org/w/index.php?title=Espresso&oldid=1381363121",
+      "retrieved": "2026-11-06",
+      "sha256": "4ece164abd4732f6862bc62c143f3827318fc98df561d5fa7a1818806d7d254b",
+      "bytes": 18286,
+      "expect": "READY"
+    },
+    {
+      "file": "french-press.md",
+      "title": "French press",
+      "mime": "text/markdown",
+      "license": "CC BY-SA 4.0 (Wikipedia contributors)",
+      "source": "https://en.wikipedia.org/w/index.php?title=French_press&oldid=1376892150",
+      "retrieved": "2026-11-06",
+      "sha256": "c0dd29aab3a58df54686766f579134869f4aa7fbc1873c878a099188fb58ceae",
+      "bytes": 6668,
+      "expect": "READY"
+    },
+    {
+      "file": "honey-bee.md",
+      "title": "Honey bee",
+      "mime": "text/markdown",
+      "license": "CC BY-SA 4.0 (Wikipedia contributors)",
+      "source": "https://en.wikipedia.org/w/index.php?title=Honey_bee&oldid=1382596485",
+      "retrieved": "2026-11-06",
+      "sha256": "cb49076ec7d6a0a6a2dd531e20e49d7ee03036583a2144187c8cacb32b0e9b4c",
+      "bytes": 47740,
+      "expect": "READY"
+    },
+    {
+      "file": "sourdough.md",
+      "title": "Sourdough",
+      "mime": "text/markdown",
+      "license": "CC BY-SA 4.0 (Wikipedia contributors)",
+      "source": "https://en.wikipedia.org/w/index.php?title=Sourdough&oldid=1382803423",
+      "retrieved": "2026-11-06",
+      "sha256": "c52de177403f18d4c6100ba82bcba186eade1234de99d8bd0ba18dffb95d52a9",
+      "bytes": 27954,
+      "expect": "READY"
+    },
+    {
+      "file": "panama-canal.md",
+      "title": "Panama Canal",
+      "mime": "text/markdown",
+      "license": "CC BY-SA 4.0 (Wikipedia contributors)",
+      "source": "https://en.wikipedia.org/w/index.php?title=Panama_Canal&oldid=1380576550",
+      "retrieved": "2026-11-06",
+      "sha256": "da38e12fcdffe0af50adac8f27ad6b707317089b14878f65daa21f4db76b87f8",
+      "bytes": 70928,
+      "expect": "READY"
+    },
+    {
+      "file": "tardigrade.txt",
+      "title": "Tardigrade",
+      "mime": "text/plain",
+      "license": "CC BY-SA 4.0 (Wikipedia contributors)",
+      "source": "https://en.wikipedia.org/w/index.php?title=Tardigrade&oldid=1383729521",
+      "retrieved": "2026-11-06",
+      "sha256": "cb4788a21d7ff025098d3a974552fa2df476bdbbd8629f0366b0ee4b00a600f1",
+      "bytes": 23246,
+      "expect": "READY"
+    },
+    {
+      "file": "us-constitution.md",
+      "title": "The Constitution of the United States",
+      "mime": "text/markdown",
+      "license": "Public domain (work of the U.S. federal government); transcription by the National Archives",
+      "source": "https://www.archives.gov/founding-docs/constitution-transcript",
+      "retrieved": "2026-11-06",
+      "sha256": "535f52e8691c2fd6fae253527842fea747a10f30857ff16d7f9c60bf61c6ed01",
+      "bytes": 26566,
+      "expect": "READY"
+    },
+    {
+      "file": "yellowstone-safety.md",
+      "title": "Yellowstone National Park: Safety",
+      "mime": "text/markdown",
+      "license": "Public domain (work of the U.S. federal government); National Park Service",
+      "source": "https://www.nps.gov/yell/planyourvisit/safety.htm",
+      "retrieved": "2026-11-06",
+      "sha256": "1b14f3a49543ffa94543c02762f33b4c2c60edd8b63ecf65e1220ed09190f21d",
+      "bytes": 22185,
+      "expect": "READY"
+    },
+    {
+      "file": "nist-sp-800-63b-4.pdf",
+      "title": "NIST SP 800-63B-4: Authentication and Authenticator Management",
+      "mime": "application/pdf",
+      "license": "Public domain (work of the U.S. federal government); NIST",
+      "source": "https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-63B-4.pdf",
+      "retrieved": "2026-11-06",
+      "sha256": "d9ab89576b5ae2cfb3ba37781110788dea27a85a5079496dbfc1a79834670afd",
+      "bytes": 993734,
+      "expect": "READY"
+    },
+    {
+      "file": "nist-csf-2.0.pdf",
+      "title": "The NIST Cybersecurity Framework (CSF) 2.0",
+      "mime": "application/pdf",
+      "license": "Public domain (work of the U.S. federal government); NIST",
+      "source": "https://nvlpubs.nist.gov/nistpubs/CSWP/NIST.CSWP.29.pdf",
+      "retrieved": "2026-11-06",
+      "sha256": "3c31f46fee98cac0c4323453e5109291a213b4de7fef8c058af9bf67f717433c",
+      "bytes": 1518858,
+      "expect": "READY"
+    },
+    {
+      "file": "hostile.md",
+      "title": "Coffee machine and kettle care",
+      "mime": "text/markdown",
+      "license": "CC0 1.0 (written for this eval)",
+      "source": "evals/corpus/files/hostile.md",
+      "retrieved": "2026-11-06",
+      "sha256": "a7eb105f382f016ea2dbb093a8324b073ac0715f7f2dc5c86aad09abb570c42c",
+      "bytes": 1346,
+      "expect": "READY"
+    },
+    {
+      "file": "scanned-notice.pdf",
+      "title": "Parking garage notice (scanned)",
+      "mime": "application/pdf",
+      "license": "CC0 1.0 (rendered for this eval by build.py from scanned-source.txt)",
+      "source": "evals/corpus/scanned-source.txt",
+      "retrieved": "2026-11-06",
+      "sha256": "3665c25c3e5b2846aa301b87fe47022279ebf58c1de2e4422a776518716ab2a4",
+      "bytes": 109163,
+      "expect": "FAILED"
+    }
+  ]
+}

@@ -2,10 +2,14 @@
  * Every number retrieval runs on, in one place, so the eval lane (build step
  * 8) can sweep them and record which values it measured.
  *
- * The defaults are not guesses, but they are provisional where marked: the
- * abstain threshold and the query instruction were measured on 12 questions
- * over the seeded corpus (2026-11-05, qwen3-embedding:0.6b@ac6da0dfba84),
- * and step 8 re-measures them on about 60.
+ * Measured by the eval lane (evals/, 64 questions over a 12-document corpus,
+ * qwen3-embedding:0.6b@ac6da0dfba84, report evals/reports/2026-11-07-baseline):
+ * hybrid recall@6 0.944 / MRR 0.859 at these values. One knob at a time from
+ * here: k 4 lost recall (0.917) and 8 gained one question (0.954) for a
+ * larger prompt; rrfK 20 and 100 were no better than 60; 250-token chunks
+ * (0.963) traded MRR and made hybrid lose to vector alone, so chunks stay 400.
+ * contextTokens went 3,200 -> 2,200 (report 2026-11-07-ctx2200): every check
+ * scored the same, and the first token came sooner (p95 22.1 -> 17.9 s).
  */
 import { z } from 'zod';
 
@@ -59,9 +63,14 @@ export const retrievalOptionsSchema = z
     contextTokens: z.number().int().min(100).max(100_000),
     /**
      * Below this best cosine similarity, the answer is "Not found in your
-     * documents" and the chat model is not called. Provisional (see header):
-     * the midpoint of the measured gap, 0.338 (best unanswerable) to 0.526
-     * (worst answerable). Fused RRF scores cannot do this job: they are
+     * documents" and the chat model is not called. A floor for questions
+     * about nothing in the library, not the whole abstention: on the eval's
+     * on-topic unanswerable questions ("how many eggs does a bumblebee queen
+     * lay" over a honey bee article) the best cosine reaches 0.686, above
+     * the lowest answerable one (0.581), so no threshold separates them and
+     * the model's own "not found" does (correct abstention 1.0 with 0.43).
+     * The cut chosen on the dev split, 0.60, wrongly abstained on a test
+     * question; 0.43 abstains on none. Fused RRF scores cannot do this job: they are
      * ranks, so the best one is the same whether the top passage is the
      * answer or merely the least unrelated text in the library.
      */
@@ -86,7 +95,7 @@ export const RETRIEVAL_DEFAULTS: Readonly<RetrievalOptions> = Object.freeze({
   k: 6,
   rrfK: 60,
   efSearch: 100,
-  contextTokens: 3_200,
+  contextTokens: 2_200,
   minSimilarity: 0.43,
   queryInstruction: 'auto',
   nearest: 3,
