@@ -22,8 +22,8 @@ test('SPECS #10: a streamed answer whose citation lands on page 2, the quote mar
   await ask(page, 'When should I bleed the radiators with the key?');
 
   const turn = page.getByTestId('turn').last();
-  // Sources arrive before the words (moment 2).
-  await expect(turn.getByRole('region', { name: 'Sources' })).toContainText('boiler');
+  // The returned tickets arrive before the words (moment 2; desk.spec.ts holds the order).
+  await expect(turn.getByTestId('tickets')).toContainText('boiler');
   await expect(turn).toHaveAttribute('data-status', 'done');
   await expect(turn.getByTestId('answer')).toContainText('Bleed the radiators every autumn');
   // Announced once, on completion, without the marker.
@@ -105,7 +105,10 @@ test('a conversation is kept: titled by its question, reopened with its citation
     'When should I bleed the radiators with the key?',
   );
 
-  await page.getByRole('link', { name: '← Your library' }).click();
+  await page
+    .getByRole('navigation', { name: 'Library and conversations' })
+    .getByRole('link', { name: 'Your library' })
+    .click();
   const conversation = page.getByTestId('conversation');
   await expect(conversation).toHaveCount(1);
   await conversation.getByRole('link').click();

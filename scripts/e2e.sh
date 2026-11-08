@@ -19,7 +19,20 @@
 # real traffic from many people is keyed.
 #
 # Usage: ./scripts/e2e.sh [playwright args...]
+#        ./scripts/e2e.sh --serve    # the same stack, left running for screenshots
+#
+# --serve builds, seeds and starts everything exactly as a test run does, gives
+# the first seeded person a conversation with a cited answer and a "not found"
+# (scripts/ui-demo-data.mjs), prints the address, and waits for Ctrl+C. The
+# design process captures its before/after evidence from it (web/scripts/
+# ui-screens.mjs): the fake model's answers, so every capture is the same.
 set -euo pipefail
+
+SERVE=0
+if [[ "${1:-}" == "--serve" ]]; then
+  SERVE=1
+  shift
+fi
 set -m # each background job leads its own process group, so cleanup kills the whole tree
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -146,6 +159,14 @@ wait_for "${API_BASE_URL}/health" api "$API_PID" "$API_LOG"
 (cd apps/web && exec node_modules/.bin/next start -p "$WEB_PORT") >"$WEB_LOG" 2>&1 &
 WEB_PID=$!
 wait_for "${APP_BASE_URL}/sign-in" web "$WEB_PID" "$WEB_LOG"
+
+if [[ $SERVE -eq 1 ]]; then
+  echo "==> Demo data for the first seeded person"
+  pnpm --filter @rag/db exec node ../../scripts/ui-demo-data.mjs
+  echo "==> Serving ${APP_BASE_URL} (fake model). Ctrl+C stops everything."
+  wait "$WEB_PID"
+  exit 0
+fi
 
 echo "==> Running Playwright"
 pnpm --filter @rag/e2e exec playwright test "$@"

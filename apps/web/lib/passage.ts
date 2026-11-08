@@ -75,3 +75,24 @@ export function originalHref(documentId: string, page: number | null): string {
   const base = `/api/documents/${documentId}/file`;
   return page === null ? base : `${base}#page=${String(page)}`;
 }
+
+/** "Page 2 · Radiators", "Page 2", "Warranty", or null when there is nothing to say. */
+export function whereWords(page: number | null, section: string | null): string | null {
+  const parts = [page === null ? null : `Page ${String(page)}`, section].filter(
+    (part): part is string => part !== null && part !== '',
+  );
+  return parts.length === 0 ? null : parts.join(' · ');
+}
+
+/**
+ * The passage page's locator line. A section named like the document is the
+ * document's own title heading, which the page already prints as its h1
+ * (UX-AUDIT #2): it is dropped, and a quote under it is in the opening.
+ */
+export function passageWhere(page: number | null, section: string | null, title: string): string {
+  const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const titled = section !== null && same(section, title);
+  return (
+    whereWords(page, titled ? null : section) ?? (titled ? 'Opening section' : 'No section heading')
+  );
+}

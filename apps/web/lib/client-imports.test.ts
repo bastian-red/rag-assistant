@@ -1,5 +1,6 @@
 /**
- * No browser bundle imports a value from the `@rag/shared` package root.
+ * No browser bundle imports a value from the `@rag/shared` package root, or
+ * from `@rag/chunker`.
  *
  * `@rag/shared` ships CommonJS, which the bundler cannot tree-shake: one
  * `import { LIMITS } from '@rag/shared'` in a sibling project's comment form put every zod
@@ -64,6 +65,13 @@ function resolveLocal(from: string, specifier: string): string | null {
   return null;
 }
 
+/**
+ * Packages whose values never reach a browser bundle: the contracts' root
+ * (zod, see above) and the chunker, the server's own document parser, which
+ * the passage viewer reuses on the server (a CommonJS barrel too).
+ */
+const SERVER_PACKAGES = new Set(['@rag/shared', '@rag/chunker']);
+
 const isClient = (source: string) => /^\s*['"]use client['"]/u.test(source);
 /** A server action module: a client gets a reference to it, never its code. */
 const isServer = (source: string) => /^\s*['"]use server['"]/u.test(source);
@@ -95,13 +103,17 @@ describe('client bundles and @rag/shared', () => {
       const source = readFileSync(file, 'utf8');
       if (isServer(source)) continue;
       for (const { specifier, typeOnly } of importsOf(source)) {
-        if (specifier === '@rag/shared' && !typeOnly) offenders.push(relative(WEB, file));
+        if (SERVER_PACKAGES.has(specifier) && !typeOnly)
+          offenders.push(`${relative(WEB, file)} (${specifier})`);
         if (specifier.startsWith('.') && !typeOnly) {
           const next = resolveLocal(file, specifier);
           if (next !== null) queue.push(next);
         }
       }
     }
-    expect(offenders, 'import these from @rag/shared/constants, or as `import type`').toEqual([]);
+    expect(
+      offenders,
+      'take constants from @rag/shared/constants, types with `import type`, and keep the chunker on the server',
+    ).toEqual([]);
   });
 });

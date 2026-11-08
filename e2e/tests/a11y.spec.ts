@@ -3,7 +3,7 @@
  *
  * Every route: sign-in and sign-up (each with an error on screen), status,
  * the library, a collection (with a delete question open), a conversation
- * with a cited answer, the passage viewer, and the 404. Each build step adds
+ * mid-stream and with a cited answer, the passage viewer, and the 404. Each build step adds
  * its routes here in the same commit.
  */
 import AxeBuilder from '@axe-core/playwright';
@@ -80,10 +80,19 @@ for (const scheme of SCHEMES) {
       await scan(page, testInfo, '/collections/[id] (confirm)', scheme);
 
       await page.goto(conversation);
-      await scriptChat({ answer: `${RADIATOR_SENTENCE.slice(0, -1)} [S1].` });
+      // Held before the first word, so the mid-stream page (tickets back,
+      // Stop showing, no answer yet) is scanned too.
+      await scriptChat({
+        answer: `${RADIATOR_SENTENCE.slice(0, -1)} [S1].`,
+        firstTokenDelayMs: 6000,
+      });
       try {
         await ask(page, 'When should I bleed the radiators with the key?');
-        await expect(page.getByTestId('turn').last()).toHaveAttribute('data-status', 'done');
+        const turn = page.getByTestId('turn').last();
+        await expect(turn.getByTestId('ticket').first()).toBeVisible();
+        await expect(turn).toHaveAttribute('data-status', 'answering');
+        await scan(page, testInfo, '/conversations/[id] (mid-stream)', scheme);
+        await expect(turn).toHaveAttribute('data-status', 'done', { timeout: 15_000 });
       } finally {
         await scriptChat(null);
       }

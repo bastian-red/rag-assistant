@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { highlight, offsetParam, originalHref, pageAt, passageHref } from './passage';
+import {
+  highlight,
+  offsetParam,
+  originalHref,
+  pageAt,
+  passageHref,
+  passageWhere,
+  whereWords,
+} from './passage';
 
 describe('highlight', () => {
   it('cuts the text around the span', () => {
@@ -75,5 +83,27 @@ describe('links', () => {
   it('opens the original at a page, or at its start without one', () => {
     expect(originalHref('d', 2)).toBe('/api/documents/d/file#page=2');
     expect(originalHref('d', null)).toBe('/api/documents/d/file');
+  });
+});
+
+describe('whereWords', () => {
+  it('says the page and the section, whichever are known', () => {
+    expect(whereWords(2, 'Radiators')).toBe('Page 2 · Radiators');
+    expect(whereWords(2, null)).toBe('Page 2');
+    expect(whereWords(null, 'Warranty')).toBe('Warranty');
+    expect(whereWords(null, null)).toBeNull();
+    expect(whereWords(null, '')).toBeNull();
+  });
+});
+
+describe('passageWhere', () => {
+  it('never repeats the title as the section', () => {
+    expect(passageWhere(null, 'Boiler service record', 'Boiler service record')).toBe(
+      'Opening section',
+    );
+    expect(passageWhere(3, ' boiler SERVICE record', 'Boiler service record')).toBe('Page 3');
+    expect(passageWhere(null, 'Warranty', 'Boiler service record')).toBe('Warranty');
+    expect(passageWhere(null, null, 'Notes')).toBe('No section heading');
+    expect(passageWhere(2, 'Radiators', 'Boiler')).toBe('Page 2 · Radiators');
   });
 });

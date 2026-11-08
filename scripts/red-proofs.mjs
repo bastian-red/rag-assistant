@@ -7,6 +7,7 @@
  *   node scripts/red-proofs.mjs            # every proof
  *   node scripts/red-proofs.mjs budget     # proofs whose name matches
  *   node scripts/red-proofs.mjs model health     # proofs matching any of them
+ *   node scripts/red-proofs.mjs --check  # every mutation still matches once (gate lane)
  *
  * Each mutation must match its file exactly once (so a refactor that moves
  * the line fails here loudly instead of "proving" nothing), and the original
@@ -108,6 +109,88 @@ const PROOFS = [
     to: '  return false;',
     suite: ['unit', '@rag/web'],
   },
+  // --- the design (step 10, docs/DESIGN.md) ----------------------------------
+  {
+    name: 'the tickets wait for the first word',
+    file: 'apps/web/components/chat.tsx',
+    from: '{row === null ? null : <Tickets row={row} live={turn.sources.length > 0} />}',
+    to: "{row === null || turn.text === '' ? null : <Tickets row={row} live={turn.sources.length > 0} />}",
+    suite: ['e2e', 'tests/desk.spec.ts', 'before the words'],
+  },
+  {
+    name: 'a stored answer loses its cited tickets',
+    file: 'apps/web/lib/tickets.ts',
+    from: '  if (turn.citations.length > 0) {',
+    to: '  if (turn.citations.length < 0) {',
+    suite: ['e2e', 'tests/desk.spec.ts', 'before the words'],
+  },
+  {
+    name: 'the tickets drop in under reduced motion',
+    file: 'apps/web/app/globals.css',
+    from: '@media (prefers-reduced-motion: no-preference) {\n  html {',
+    to: '@media all {\n  html {',
+    suite: ['e2e', 'tests/desk.spec.ts', 'motion is welcome'],
+  },
+  {
+    name: 'a citation shrinks below a 24 px target',
+    file: 'apps/web/app/globals.css',
+    from: '  min-inline-size: 1.5rem;\n  block-size: 1.5rem;',
+    to: '  min-inline-size: 1rem;\n  block-size: 1rem;',
+    suite: ['e2e', 'tests/layout.spec.ts', 'a collection, a conversation and a passage'],
+  },
+  {
+    name: 'the key hint shows on a touch screen',
+    file: 'apps/web/app/globals.css',
+    from: '@media (pointer: coarse) {',
+    to: '@media (pointer: none) {',
+    suite: ['e2e', 'tests/layout.spec.ts', 'keys a phone does not have'],
+  },
+  {
+    // The bug the first render had: `.button` comes later and won.
+    name: 'the sidebar toggle shows at desktop width',
+    file: 'apps/web/app/globals.css',
+    from: '.sidenav .sidenav-toggle {\n  display: none;\n}',
+    to: '.sidenav-toggle {\n  display: none;\n}',
+    suite: ['e2e', 'tests/layout.spec.ts', 'simply there'],
+  },
+  {
+    name: 'a markdown passage shown as its source',
+    file: 'apps/web/lib/passage-blocks.ts',
+    // Reflow alone is invisible in a browser (a newline renders as a space, and
+    // toHaveText collapses whitespace); the unit suite holds it. What a reader
+    // sees is markdown read as plain text: "## Tyres" left in, no heading.
+    from: "  return mime === 'text/markdown' ? 'markdown' : 'text';",
+    to: "  return 'text';",
+    suite: ['e2e', 'tests/desk.spec.ts', 'reads as a document'],
+  },
+  {
+    name: "a passage keeps its source's hard line breaks",
+    file: 'apps/web/lib/passage-blocks.ts',
+    from: "const reflow = (part: string) => part.replace(/[ \\t]*\\n[ \\t]*/gu, ' ');",
+    to: 'const reflow = (part: string) => part;',
+    suite: ['unit', '@rag/web'],
+  },
+  {
+    name: 'the passage locator repeats the title',
+    file: 'apps/web/lib/passage.ts',
+    from: '  const titled = section !== null && same(section, title);',
+    to: '  const titled = false;',
+    suite: ['unit', '@rag/web'],
+  },
+  {
+    name: "the accent drifts to a sibling project's",
+    file: 'apps/web/app/globals.css',
+    from: '  --accent: #6c529e;',
+    to: '  --accent: #86269b;',
+    suite: ['unit', '@rag/web'],
+  },
+  {
+    name: 'the chunker reaches a browser bundle through the ticket rows',
+    file: 'apps/web/lib/passage.ts',
+    from: "import type { ChunkView } from '@rag/shared';",
+    to: "import { unitsOf } from '@rag/chunker';\nexport const units = unitsOf;\nimport type { ChunkView } from '@rag/shared';",
+    suite: ['unit', '@rag/web'],
+  },
   // --- the model server: reachable is not the same as ready ----------------
   {
     name: 'health reports ready with a model missing',
@@ -170,8 +253,8 @@ const PROOFS = [
   {
     name: 'web proxy protects only the pages it lists',
     file: 'apps/web/lib/sign-in-gate.ts',
-    from: '  if (isPublicPath(pathname)) return null;\n',
-    to: '  if (!/^\\/(library|chat)/u.test(pathname)) return null;\n',
+    from: '  if (isPublicPath(pathname) || answersForItself(pathname)) return null;\n',
+    to: '  if (!/^\\/(library|chat)/u.test(pathname) || answersForItself(pathname)) return null;\n',
     suite: ['unit', '@rag/web'],
   },
   // --- chunking: spans, sentences, sizes -----------------------------------
@@ -507,7 +590,7 @@ const PROOFS = [
   {
     name: 'a .pdf is accepted by its name, not its bytes',
     file: 'packages/shared/src/server/sniff.ts',
-    from: '    return isPdf(bytes)\n',
+    from: '    return isPdf(file.head)\n',
     to: '    return true\n',
     suite: ['integration', 'documents'],
   },
@@ -668,6 +751,26 @@ const PROOFS = [
     suite: ['unit', '@rag/answer'],
   },
 ];
+
+/**
+ * `--check`: no suite runs, nothing is broken. Every mutation must still
+ * match its file exactly once. A refactor that moves a guarded line leaves a
+ * proof that can only fail with "no match" on the next full run, which
+ * nobody runs on every commit; this is the gate-lane half (CI lint job).
+ */
+if (process.argv.includes('--check')) {
+  const stale = [];
+  for (const proof of PROOFS) {
+    const text = readFileSync(join(ROOT, proof.file), 'utf8');
+    for (const { from } of [proof, ...(proof.also === undefined ? [] : [proof.also])]) {
+      const count = text.split(from).length - 1;
+      if (count !== 1) stale.push(`${proof.name}: matches ${proof.file} ${String(count)} times`);
+    }
+  }
+  for (const line of stale) console.error(`red-proofs --check: ${line}`);
+  console.log(`red-proofs --check: ${String(PROOFS.length)} proofs, ${String(stale.length)} stale`);
+  process.exit(stale.length === 0 ? 0 : 1);
+}
 
 const filters = process.argv.slice(2);
 const chosen = PROOFS.filter(

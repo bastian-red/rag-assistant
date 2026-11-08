@@ -54,6 +54,7 @@ jobs:
       - run: pnpm scan:node-pin:self-test
       - run: pnpm scan:node-pin
       - run: pnpm scan:self-import
+      - run: pnpm proofs:check
       - name: Install gitleaks
         shell: bash
         run: |

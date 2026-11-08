@@ -8,7 +8,7 @@ export const metadata = { title: 'Create an account', robots: { index: false } }
 /** A new, private library: one empty collection to drop the first file into. */
 export default function SignUpPage() {
   return (
-    <main id="main" className="page">
+    <main id="main" className="page page-narrow">
       <h1>Create your library</h1>
       <div className="panel">
         <SignUpForm action={signUpAction} />

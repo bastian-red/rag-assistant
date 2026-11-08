@@ -1,6 +1,6 @@
 'use client';
 
-import type { ChatStreamEvent, StreamSource } from '@rag/shared';
+import type { ChatStreamEvent } from '@rag/shared';
 import { LIMITS } from '@rag/shared/constants';
 import { createSseParser } from '@rag/shared/sse';
 import Link from 'next/link';
@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 
 import { spokenAnswer } from '../lib/answer';
+import { dayWords } from '../lib/dates';
 import {
   applyEvent,
   chipTarget,
@@ -18,17 +19,25 @@ import {
   type Turn,
 } from '../lib/chat-state';
 import { passageHref } from '../lib/passage';
+import { nearestTickets, TICKET_STATE_WORDS, ticketsOf, type TicketRow } from '../lib/tickets';
 import { AnswerText } from './answer-text';
 
 interface Props {
   readonly conversationId: string;
   readonly turns: readonly Turn[];
-  /** "Home" or "your whole library": what the question is asked over. */
+  /** "“Home”" or "your whole library": what the question is asked over. */
   readonly scope: string;
+  /** What each slip is stamped with: "Home", "Whole library". */
+  readonly stamp: string;
 }
 
 const NOT_FOUND = 'Not found in your documents.';
 
+/**
+ * A `[Sn]` marker in the answer: the ticket's number, set superscript, a
+ * 24 px target (UX-AUDIT #7: the old boxed chip read as a form field and was
+ * 20 px tall). Its number is the ticket's number, so they read as one object.
+ */
 function Chip({ turn, marker }: { readonly turn: Turn; readonly marker: number }) {
   const target = chipTarget(turn, marker);
   if (target.kind === 'unknown') return <span className="chip">{`[S${String(marker)}]`}</span>;
@@ -55,27 +64,58 @@ function Chip({ turn, marker }: { readonly turn: Turn; readonly marker: number }
   );
 }
 
-function SourceList({
-  sources,
-  label,
-}: {
-  readonly sources: readonly StreamSource[];
-  readonly label: string;
-}) {
+/**
+ * The returned tickets (docs/DESIGN.md, the signature): what the desk pulled,
+ * numbered, before the answer says a word. Live rows drop in one by one in
+ * number order (CSS, stilled under reduced motion); stored rows are the cited
+ * passages and do not animate.
+ */
+function Tickets({ row, live }: { readonly row: TicketRow; readonly live: boolean }) {
   return (
-    <section className="sources" aria-label={label}>
-      <h3>{label}</h3>
-      <ol>
-        {sources.map((source) => {
-          const page = pageWords(source.page, source.pageEnd);
+    <section
+      className="tickets"
+      aria-label={`${row.label}: ${row.count}`}
+      data-live={live}
+      data-testid="tickets"
+    >
+      <h3 className="tickets-label">
+        {row.label} <span className="tickets-count">· {row.count}</span>
+      </h3>
+      <ol className="ticket-list">
+        {row.tickets.map((ticket) => {
+          const state = TICKET_STATE_WORDS[ticket.state];
+          const head = (
+            <>
+              <span className="ticket-no num">
+                <span className="visually-hidden">Source </span>
+                {ticket.marker}
+                <span className="visually-hidden">: </span>
+              </span>
+              <span className="ticket-title">{ticket.title}</span>
+            </>
+          );
           return (
-            <li key={source.marker} value={source.marker}>
-              <Link href={passageHref(source)}>{source.documentTitle}</Link>
-              {page === null ? null : <span className="muted">, {page}</span>}
-              {source.headingPath.length === 0 ? null : (
-                <span className="muted"> · {source.headingPath.join(' › ')}</span>
+            <li
+              key={ticket.marker}
+              className="ticket"
+              data-state={ticket.state}
+              data-testid="ticket"
+            >
+              {ticket.href === null ? (
+                <span className="ticket-head">{head}</span>
+              ) : (
+                <Link className="ticket-head" href={ticket.href}>
+                  {head}
+                </Link>
               )}
-              <p className="snippet">{source.snippet}</p>
+              {ticket.where === null ? null : <span className="ticket-where">{ticket.where}</span>}
+              <span className="ticket-excerpt">{ticket.excerpt}</span>
+              {state === null ? null : (
+                <span className="ticket-state" data-testid="ticket-state">
+                  <span aria-hidden="true">{state.glyph} </span>
+                  {state.word}
+                </span>
+              )}
             </li>
           );
         })}
@@ -84,19 +124,34 @@ function SourceList({
   );
 }
 
-function TurnView({ turn }: { readonly turn: Turn }) {
+function TurnView({ turn, stamp }: { readonly turn: Turn; readonly stamp: string }) {
+  const row = ticketsOf(turn);
+  const nearest = turn.abstained === null ? null : nearestTickets(turn.abstained.nearest);
   return (
     <article className="turn" data-testid="turn" data-status={turn.status}>
-      <p className="question">
-        <span className="visually-hidden">You asked: </span>
-        {turn.question}
-      </p>
+      <div className="slip">
+        <p className="slip-label" aria-hidden="true">
+          Call slip
+        </p>
+        {/* A heading per question, so a long conversation is navigable by its questions. */}
+        <h2 className="question">
+          <span className="visually-hidden">You asked: </span>
+          {turn.question}
+        </h2>
+        <p className="stamp">
+          <span className="visually-hidden">Asked of </span>
+          {stamp}
+          <span aria-hidden="true"> · </span>
+          <span className="visually-hidden">, on </span>
+          <time dateTime={turn.askedAt}>{dayWords(turn.askedAt)}</time>
+        </p>
+      </div>
       {turn.status === 'searching' ? (
-        <p className="muted" data-testid="searching">
+        <p className="muted searching" data-testid="searching">
           <span aria-hidden="true">◌ </span>Searching your documents…
         </p>
       ) : null}
-      {turn.sources.length > 0 ? <SourceList sources={turn.sources} label="Sources" /> : null}
+      {row === null ? null : <Tickets row={row} live={turn.sources.length > 0} />}
       {turn.staleDocuments > 0 ? (
         <p className="muted">
           {turn.staleDocuments === 1
@@ -117,9 +172,7 @@ function TurnView({ turn }: { readonly turn: Turn }) {
           />
         )}
       </div>
-      {turn.abstained !== null && turn.abstained.nearest.length > 0 ? (
-        <SourceList sources={turn.abstained.nearest} label="Nearest passages" />
-      ) : null}
+      {nearest === null ? null : <Tickets row={nearest} live />}
       {turn.status === 'stopped' ? (
         <p className="status-word" data-testid="stopped">
           <span aria-hidden="true">■ </span>Stopped. The text above is what was written before you
@@ -137,8 +190,8 @@ function TurnView({ turn }: { readonly turn: Turn }) {
 }
 
 /**
- * Ask, and watch the answer arrive: the sources first, then the words, each
- * `[Sn]` a chip that opens its passage. Stop keeps what was written (the API
+ * Ask, and watch the answer arrive: the returned tickets first, then the
+ * words, each `[Sn]` a superscript ticket number that opens its passage. Stop keeps what was written (the API
  * stores the same text as STOPPED).
  *
  * The stream is read with fetch, not EventSource, because the request has a
@@ -147,7 +200,7 @@ function TurnView({ turn }: { readonly turn: Turn }) {
  * (`lib/upstream.ts`). The finished answer is announced once, politely: a
  * live region over the streaming text would read every three characters.
  */
-export function Chat({ conversationId, turns: initial, scope }: Props) {
+export function Chat({ conversationId, turns: initial, scope, stamp }: Props) {
   const router = useRouter();
   const [turns, setTurns] = useState<readonly Turn[]>(initial);
   const [question, setQuestion] = useState('');
@@ -163,7 +216,7 @@ export function Chat({ conversationId, turns: initial, scope }: Props) {
     counter.current += 1;
     // The turn lives here and is copied into state after every change: reading
     // it back out of a state updater is not safe, React may run that later.
-    let turn = startTurn(text, `pending-${String(counter.current)}`);
+    let turn = startTurn(text, `pending-${String(counter.current)}`, new Date().toISOString());
     const show = (next: Turn) => {
       turn = next;
       setTurns((current) => current.map((t, i) => (i === current.length - 1 ? next : t)));
@@ -266,13 +319,13 @@ export function Chat({ conversationId, turns: initial, scope }: Props) {
             Ask anything about {scope}. Every answer names the passages it came from.
           </p>
         ) : (
-          turns.map((turn) => <TurnView key={turn.key} turn={turn} />)
+          turns.map((turn) => <TurnView key={turn.key} turn={turn} stamp={stamp} />)
         )}
         <div ref={endRef} />
       </div>
-      <form className="composer" onSubmit={onSubmit}>
+      <form className="composer slip" onSubmit={onSubmit}>
         <label className="field">
-          <span>Your question</span>
+          <span className="slip-label">Your question</span>
           <textarea
             className="field-input"
             name="question"
@@ -285,7 +338,13 @@ export function Chat({ conversationId, turns: initial, scope }: Props) {
             placeholder={`Ask about ${scope}…`}
           />
         </label>
-        <div className="actions">
+        <div className="composer-foot">
+          <p className="stamp">
+            <span className="visually-hidden">Asked of </span>
+            {stamp}
+          </p>
+          {/* Only where there is a keyboard to press them (UX-AUDIT #6). */}
+          <span className="keys-hint muted">Enter to ask, Shift+Enter for a new line.</span>
           {busy ? (
             <button className="button" type="button" onClick={stop} data-testid="stop">
               <span aria-hidden="true">■ </span>Stop
@@ -299,7 +358,6 @@ export function Chat({ conversationId, turns: initial, scope }: Props) {
               Ask
             </button>
           )}
-          <span className="muted">Enter to ask, Shift+Enter for a new line.</span>
         </div>
       </form>
       <p className="visually-hidden" role="status" aria-live="polite" data-testid="announcer">

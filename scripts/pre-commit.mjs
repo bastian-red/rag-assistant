@@ -100,6 +100,14 @@ const steps = [
     required: true,
   },
   {
+    // Every red proof's mutation still matches its file once (a moved line
+    // leaves a proof that cannot break anything).
+    name: 'red proofs still aimed',
+    cmd: 'node',
+    args: ['scripts/red-proofs.mjs', '--check'],
+    required: true,
+  },
+  {
     // CI installs with --frozen-lockfile; a local install never is. A version
     // pin changed after the last install (e2fad2f) passed every local lane and
     // failed all eight CI jobs at install. About 2 s, and nothing is written.

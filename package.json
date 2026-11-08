@@ -29,6 +29,7 @@
     "scan:self-import:self-test": "node scripts/self-import.mjs --self-test",
     "scan:node-pin": "node scripts/node-pin.mjs",
     "scan:node-pin:self-test": "node scripts/node-pin.mjs --self-test",
+    "proofs:check": "node scripts/red-proofs.mjs --check",
     "scan:secrets": "gitleaks detect --no-banner --redact --config .gitleaks.toml",
     "format": "prettier --write \"**/*.{ts,tsx,js,cjs,mjs,json,md}\"",
     "prepare": "node scripts/install-hooks.mjs",

@@ -97,8 +97,9 @@ describe('design tokens', () => {
   it('found tokens on both sides, so the scan is actually running', () => {
     // A walk that silently returned nothing would make every assertion below
     // vacuously true, which is the failure mode of every scanning test.
-    // No next/font variable is asserted yet: the scaffold renders in the system
-    // face until the design step chooses and self-hosts the real ones.
+    expect(injected, 'next/font variables in app/layout.tsx').toEqual(
+      new Set(['--font-text', '--font-ui', '--font-mono']),
+    );
     expect(declared.size, 'declarations found in app/**/*.css').toBeGreaterThan(8);
     expect(names.size, 'distinct var() references found').toBeGreaterThan(5);
   });

@@ -137,6 +137,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@rag/chunker':
+        specifier: workspace:*
+        version: link:../../packages/chunker
       '@rag/shared':
         specifier: workspace:*
         version: link:../../packages/shared

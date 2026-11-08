@@ -18,7 +18,7 @@ export default async function SignInPage({
 }) {
   const next = safeNextPath((await searchParams).next);
   return (
-    <main id="main" className="page">
+    <main id="main" className="page page-narrow">
       <h1>Sign in to your library</h1>
       <div className="panel">
         <AuthForm next={next} action={signInAction} />
@@ -26,11 +26,42 @@ export default async function SignInPage({
       <p>
         New here? <Link href="/sign-up">Create an account</Link>
       </p>
-      <p className="muted">
-        Two demo accounts, each with its own private library:{' '}
-        <code translate="no">alma@rag.test</code> and <code translate="no">bruno@rag.test</code>.
-        Passwords are in the README.
-      </p>
+      {/*
+        Local demo accounts on a local database, already published in the
+        README; printed here so trying the app needs no second tab
+        (UX-AUDIT #12). The app is never deployed, so these logins
+        only ever open a reader's own local copy.
+      */}
+      <section aria-labelledby="demo-heading" className="demo">
+        <h2 id="demo-heading">Demo accounts</h2>
+        <p className="muted">Each has its own private library.</p>
+        <table className="table">
+          <thead>
+            <tr>
+              <th scope="col">Email</th>
+              <th scope="col">Password</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <code translate="no">alma@rag.test</code>
+              </td>
+              <td>
+                <code translate="no">alma-password-2026</code>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code translate="no">bruno@rag.test</code>
+              </td>
+              <td>
+                <code translate="no">bruno-password-2026</code>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
     </main>
   );
 }

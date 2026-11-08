@@ -149,7 +149,7 @@ export function CollectionDocuments({ collectionId, documents: initial, collecti
 
   return (
     <>
-      <section aria-labelledby="add-heading" className="panel">
+      <section aria-labelledby="add-heading">
         <h2 id="add-heading">Add documents</h2>
         <div
           className="dropzone"
@@ -161,11 +161,15 @@ export function CollectionDocuments({ collectionId, documents: initial, collecti
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
         >
-          <label className="field">
-            <span>Choose files, or drop them here</span>
+          {/* The drop is said in words, not left to a dashed edge (UX-AUDIT #9). */}
+          <p className="dropzone-say" aria-hidden="true">
+            Drop files here
+          </p>
+          <label className="button dropzone-pick" data-disabled={uploading !== null}>
+            Choose files<span className="visually-hidden">, or drop them here</span>
             <input
               ref={inputRef}
-              className="field-input"
+              className="visually-hidden"
               type="file"
               name="files"
               multiple
@@ -212,7 +216,7 @@ export function CollectionDocuments({ collectionId, documents: initial, collecti
                 document.status === 'READY' ? `${String(document.chunks)} passages` : null,
               ].filter((fact): fact is string => fact !== null);
               return (
-                <li key={document.id} className="panel document" data-testid="document">
+                <li key={document.id} className="document" data-testid="document">
                   <h3>{document.title}</h3>
                   <p className="muted">
                     <span translate="no">{facts[0]}</span>

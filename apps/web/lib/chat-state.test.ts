@@ -37,7 +37,7 @@ const citation = (marker: number, over: Partial<CitationView> = {}): CitationVie
 });
 
 const run = (events: ChatStreamEvent[]): Turn =>
-  events.reduce(applyEvent, startTurn('How hot?', 'pending'));
+  events.reduce(applyEvent, startTurn('How hot?', 'pending', '2026-11-08T09:00:00.000Z'));
 
 const retrieval: ChatStreamEvent = {
   event: 'retrieval',
@@ -192,6 +192,8 @@ describe('turnsFromMessages', () => {
     ]);
     expect(turns[2]!.error).toBe('The model server stopped.');
     expect(turns[3]!.abstained).toEqual({ nearest: [] });
+    // The slip is stamped with when the question was asked, not answered.
+    expect(turns[0]!.askedAt).toBe('2026-11-07T10:00:00.000Z');
   });
 
   it('keeps a question whose answer was never saved', () => {

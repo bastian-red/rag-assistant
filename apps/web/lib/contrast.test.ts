@@ -3,8 +3,9 @@
  * from the real stylesheet. Never from a copy of the palette: a table of hexes
  * in TypeScript would pass forever while the CSS said something else.
  *
- * The palette is the scaffold's colourless placeholder until the design step;
- * this gate holds whatever is there, so the real identity lands under it.
+ * The reference desk palette (docs/DESIGN.md). `--rule` is the one token not
+ * listed: a hairline between regions, never the edge of a control, so it has
+ * no contrast floor (WCAG 1.4.11 covers what is needed to identify a control).
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -45,6 +46,11 @@ describe('text clears AA everywhere it is painted', () => {
         });
       }
     }
+    it(`${name}: --text on --mark (the quoted words, a hovered citation, a drop target)`, () => {
+      expect(ratio(resolve(palette, '--text'), resolve(palette, '--mark'))).toBeGreaterThanOrEqual(
+        AA_NORMAL,
+      );
+    });
     it(`${name}: --accent-ink on --accent (the primary button)`, () => {
       expect(
         ratio(resolve(palette, '--accent-ink'), resolve(palette, '--accent')),

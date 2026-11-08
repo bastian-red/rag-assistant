@@ -49,7 +49,8 @@ export async function createCollectionAction(
     if (error instanceof ApiError && error.status < 500) return { error: error.message };
     throw error;
   }
-  revalidatePath('/');
+  // The layout too: the sidebar lists collections.
+  revalidatePath('/', 'layout');
   redirect(`/collections/${id}`);
 }
 
@@ -57,7 +58,7 @@ export async function deleteCollectionAction(form: FormData): Promise<void> {
   const id = idFrom(form, 'collectionId');
   const user = await requireUser(`/collections/${id}`);
   await apiFetch(user, `/collections/${id}`, noBody, { method: 'DELETE' });
-  revalidatePath('/');
+  revalidatePath('/', 'layout');
   redirect('/');
 }
 
@@ -66,7 +67,8 @@ export async function deleteDocumentAction(form: FormData): Promise<void> {
   const collectionId = idFrom(form, 'collectionId');
   const user = await requireUser(`/collections/${collectionId}`);
   await apiFetch(user, `/documents/${id}`, noBody, { method: 'DELETE' });
-  revalidatePath(`/collections/${collectionId}`);
+  // The layout too: the sidebar counts each collection's ready documents.
+  revalidatePath('/', 'layout');
 }
 
 /** Start a conversation over one collection, or the whole library, and open it. */
@@ -78,6 +80,7 @@ export async function startConversationAction(form: FormData): Promise<void> {
     method: 'POST',
     body: { collectionId },
   });
+  revalidatePath('/', 'layout');
   redirect(`/conversations/${conversation.id}`);
 }
 
@@ -85,6 +88,6 @@ export async function deleteConversationAction(form: FormData): Promise<void> {
   const id = idFrom(form, 'conversationId');
   const user = await requireUser('/');
   await apiFetch(user, `/conversations/${id}`, noBody, { method: 'DELETE' });
-  revalidatePath('/');
+  revalidatePath('/', 'layout');
   if (form.get('then') === 'library') redirect('/');
 }

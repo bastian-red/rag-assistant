@@ -18,6 +18,8 @@ export interface Turn {
   /** The answer's id once known; the question's text is the key before that. */
   readonly key: string;
   readonly question: string;
+  /** When the question was asked (ISO): the slip's date stamp. */
+  readonly askedAt: string;
   readonly status: TurnStatus;
   readonly text: string;
   /** What the answer was built from, in marker order (live answers only). */
@@ -31,10 +33,11 @@ export interface Turn {
   readonly staleDocuments: number;
 }
 
-export function startTurn(question: string, key: string): Turn {
+export function startTurn(question: string, key: string, askedAt: string): Turn {
   return {
     key,
     question,
+    askedAt,
     status: 'searching',
     text: '',
     sources: [],
@@ -115,6 +118,7 @@ export function turnsFromMessages(messages: readonly MessageView[]): Turn[] {
     turns.push({
       key: answer?.id ?? question.id,
       question: question.content,
+      askedAt: question.createdAt,
       status:
         answer === null
           ? 'failed'
