@@ -168,5 +168,15 @@ if [[ $SERVE -eq 1 ]]; then
   exit 0
 fi
 
+# Lighthouse first, while the server is idle: its budgets are timing
+# measurements (e2e/lighthouse-budget.mjs). It signs up a reader of its own,
+# removed by e2e-cleanup.mjs on the next run. LIGHTHOUSE=0 skips it for a quick
+# local loop; CI never sets it. The demo capture (DEMO=1) has no use for it.
+if [[ "${LIGHTHOUSE:-1}" != "0" && "${DEMO:-0}" != "1" ]]; then
+  echo "==> Running Lighthouse (reports in ${LOG_DIR}/lighthouse)"
+  LOG_DIR="$LOG_DIR" APP_BASE_URL="$APP_BASE_URL" \
+    pnpm --filter @rag/e2e exec node lighthouse.mjs "$APP_BASE_URL"
+fi
+
 echo "==> Running Playwright"
 pnpm --filter @rag/e2e exec playwright test "$@"

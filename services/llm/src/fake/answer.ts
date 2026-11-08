@@ -12,6 +12,23 @@ import { parseSources, type ChatMessage } from '@rag/shared';
 export const NOT_FOUND = 'Not found in your documents.';
 const MAX_WORDS = 30;
 
+/**
+ * A scripted answer may cite by content: `[S:Seven years]` becomes the marker
+ * of the first source whose text contains "Seven years", so a demo or a spec
+ * cites the right document whatever order retrieval packed them in. A needle
+ * no source holds is left as written, which the citation parser then drops,
+ * the same as a model citing a source it was not given.
+ */
+export function resolveCites(answer: string, messages: readonly ChatMessage[]): string {
+  if (!answer.includes('[S:')) return answer;
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+  const sources = parseSources(lastUser?.content ?? '');
+  return answer.replace(/\[S:([^\]]+)\]/gu, (whole, needle: string) => {
+    const source = sources.find((s) => s.text.includes(needle));
+    return source === undefined ? whole : `[S${String(source.marker)}]`;
+  });
+}
+
 /** The first sentence of a passage, skipping markdown headings and blank lines. */
 function firstSentence(text: string): string | null {
   const line = text

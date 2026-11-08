@@ -3,11 +3,22 @@ import { describe, expect, it } from 'vitest';
 import { markersIn, parseAnswer, parseInline, spokenAnswer } from './answer';
 
 describe('parseInline', () => {
-  it('turns markers into their own nodes', () => {
+  it('turns markers into their own nodes, set against the word they cite', () => {
     expect(parseInline('Opens at 9:00 [S2].')).toEqual([
-      { kind: 'text', text: 'Opens at 9:00 ' },
+      { kind: 'text', text: 'Opens at 9:00' },
       { kind: 'marker', marker: 2 },
       { kind: 'text', text: '.' },
+    ]);
+  });
+
+  it('drops the space before each marker, and only that space', () => {
+    expect(parseInline('ends in March 2028 [S1]. It stays valid  [S1] [S2] if serviced')).toEqual([
+      { kind: 'text', text: 'ends in March 2028' },
+      { kind: 'marker', marker: 1 },
+      { kind: 'text', text: '. It stays valid' },
+      { kind: 'marker', marker: 1 },
+      { kind: 'marker', marker: 2 },
+      { kind: 'text', text: ' if serviced' },
     ]);
   });
 

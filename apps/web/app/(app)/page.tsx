@@ -13,7 +13,7 @@ import {
   startConversationAction,
 } from '../library-actions';
 
-export const metadata = { title: 'Library', robots: { index: false } };
+export const metadata = { title: 'Library' };
 
 /**
  * The library: what a returning reader comes for, in that order. Ask (the

@@ -13,7 +13,7 @@
  */
 import { chunkDocument, type ChunkInput, type ChunkOptions } from '@rag/chunker';
 import type { PrismaClient } from '@rag/db';
-import { INGEST_FAILURES, type IngestEvent, type IngestJob } from '@rag/shared';
+import { INGEST_FAILURES, type AcceptedType, type IngestEvent, type IngestJob } from '@rag/shared';
 import { readStoredFile, sha256Of } from '@rag/shared/server';
 
 import { IngestRefusal } from './errors';
@@ -65,6 +65,15 @@ function chunkInput(parsed: Parsed): ChunkInput {
     : { format: parsed.format, text: parsed.text };
 }
 
+/**
+ * Parse and chunk, exactly as a worker does: the eval uses it to tell a
+ * stored library made by an older chunker from one this code would make.
+ */
+export async function chunksFor(mime: AcceptedType, bytes: Uint8Array, options?: ChunkOptions) {
+  const parsed = await parseFile(mime, bytes);
+  return { parsed, chunked: chunkDocument(chunkInput(parsed), options) };
+}
+
 export async function ingestDocument(job: IngestJob, deps: PipelineDeps): Promise<Outcome> {
   const batchSize = deps.batchSize ?? 32;
   const now = deps.now ?? (() => new Date());
@@ -90,8 +99,7 @@ export async function ingestDocument(job: IngestJob, deps: PipelineDeps): Promis
   if (bytes === null) throw new IngestRefusal(INGEST_FAILURES.fileMissing);
   if (sha256Of(bytes) !== doc.sha256) throw new IngestRefusal(INGEST_FAILURES.fileChanged);
 
-  const parsed = await parseFile(doc.mime, bytes);
-  const chunked = chunkDocument(chunkInput(parsed), deps.chunkOptions);
+  const { parsed, chunked } = await chunksFor(doc.mime, bytes, deps.chunkOptions);
   if (chunked.chunks.length === 0) {
     throw new IngestRefusal(
       parsed.format === 'pdf' ? INGEST_FAILURES.noTextLayer : INGEST_FAILURES.empty,

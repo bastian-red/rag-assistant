@@ -42,6 +42,9 @@ export function parseInline(text: string): Inline[] {
     const rest = text.slice(i);
     const marker = /^\[S(\d{1,2})\]/u.exec(rest);
     if (marker) {
+      // A citation sits against the word it cites ("2028¹", not "2028 ¹"):
+      // models write a space before the marker, the chip should not show it.
+      buffer = buffer.replace(/[ \t]+$/u, '');
       flush();
       out.push({ kind: 'marker', marker: Number(marker[1]) });
       i += marker[0].length;

@@ -9,12 +9,15 @@
  * Ingest is `ingestDocument` from @rag/ingest, the worker's own function,
  * called in process (no queue): what the eval measures is what the worker
  * writes. A library is reused when every document is in the state the
- * manifest expects and every chunk is in the vector space the model server
- * reports now; anything else is ingested again.
+ * manifest expects, every chunk is in the vector space the model server
+ * reports now, and the stored chunks are the spans this chunker makes of the
+ * file today (a chunker change once went unmeasured: only the file hash and
+ * the space were compared); anything else is ingested again.
  */
 import { DEFAULT_CHUNK_OPTIONS, type ChunkOptions } from '@rag/chunker';
 import type { PrismaClient } from '@rag/db';
-import { IngestRefusal, ingestDocument } from '@rag/ingest';
+import { chunksFor, IngestRefusal, ingestDocument } from '@rag/ingest';
+import type { AcceptedType } from '@rag/shared';
 import { writeStoredFile } from '@rag/shared/server';
 
 import { corpusBytes, type CorpusDocument } from './corpus';
@@ -51,6 +54,34 @@ export interface SetupDeps {
   readonly embeddingSpace: () => Promise<string>;
   readonly uploadDir: string;
   readonly log: (line: string) => void;
+}
+
+/** `ord:start-end` for every chunk, in order: one string to compare. */
+export function spanKey(chunks: readonly { charStart: number; charEnd: number }[]): string {
+  return chunks.map((c, i) => `${String(i)}:${String(c.charStart)}-${String(c.charEnd)}`).join(' ');
+}
+
+/** Do the stored chunks match what this code's chunker makes of the file now? */
+export async function sameSpans(
+  prisma: PrismaClient,
+  documentId: string,
+  doc: CorpusDocument,
+  chunkOptions: ChunkOptions,
+): Promise<boolean> {
+  const stored = await prisma.chunk.findMany({
+    where: { documentId },
+    orderBy: { ord: 'asc' },
+    select: { charStart: true, charEnd: true },
+  });
+  let now: readonly { charStart: number; charEnd: number }[] = [];
+  try {
+    now = (await chunksFor(doc.mime as AcceptedType, corpusBytes(doc), chunkOptions)).chunked
+      .chunks;
+  } catch (error) {
+    // A file the pipeline refuses has no chunks, stored or new.
+    if (!(error instanceof IngestRefusal)) throw error;
+  }
+  return spanKey(stored) === spanKey(now);
 }
 
 export function ownerEmail(options: ChunkOptions): string {
@@ -90,7 +121,7 @@ export async function library(
       const elsewhere = await prisma.chunk.count({
         where: { documentId: existing.id, NOT: { embeddingModel: space } },
       });
-      if (elsewhere === 0) {
+      if (elsewhere === 0 && (await sameSpans(prisma, existing.id, doc, chunkOptions))) {
         tick(index + 1, corpus.length, `${doc.file} reused`);
         continue;
       }

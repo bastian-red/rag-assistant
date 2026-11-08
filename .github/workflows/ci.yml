@@ -179,7 +179,7 @@ jobs:
           retention-days: 7
 
   e2e:
-    name: E2E (Playwright on Chromium + Firefox, axe in both schemes, 390 px)
+    name: E2E (Lighthouse budgets, Playwright on Chromium + Firefox, axe in both schemes, 390 px)
     runs-on: ubuntu-24.04
     services:
       postgres: *postgres
@@ -197,6 +197,14 @@ jobs:
       - run: pnpm db:generate
       - run: pnpm --filter @rag/e2e exec playwright install --with-deps chromium firefox
       - run: ./scripts/e2e.sh
+      # The median run's report for every page, pass or fail.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lighthouse
+          path: /tmp/rag-e2e/lighthouse
+          retention-days: 14
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -233,3 +241,61 @@ jobs:
           push: false
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  # The images job proves each Dockerfile builds; this one proves the compose
+  # stack the README documents actually runs: migrate + seed from the api
+  # image, then api, ingest and web healthy, then content only a working stack
+  # can produce. The fake model server stands in for the host's Ollama at the
+  # address compose uses by default (host.docker.internal:11434), so it binds
+  # 0.0.0.0 rather than loopback.
+  compose:
+    name: docker compose --profile app runs the stack
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Set up .env the way the README says
+        run: |
+          cp .env.example .env
+          sed -i "s|^AUTH_SECRET=|AUTH_SECRET=$(openssl rand -base64 32)|" .env
+      - name: Start the fake model server where compose points
+        run: |
+          pnpm exec turbo run build --filter=@rag/llm --output-logs=errors-only
+          nohup node services/llm/dist/fake/main.js --host 0.0.0.0 --port 11434 \
+            --models "$(sed -n 's/^CHAT_MODEL=//p' .env),$(sed -n 's/^EMBED_MODEL=//p' .env)" \
+            >/tmp/fake-ollama.log 2>&1 &
+          for _ in $(seq 1 50); do curl -sf -o /dev/null http://localhost:11434/api/version && break; sleep 0.1; done
+          curl -sf http://localhost:11434/api/tags
+      - name: docker compose --profile app up --build --wait
+        run: docker compose -f infra/docker-compose.yml --profile app up -d --build --wait --wait-timeout 600
+      - name: The stack answers with real content
+        run: |
+          set -euo pipefail
+          curl -sf http://localhost:4600/health | tee /tmp/api-health.json | grep -q '"status":"ok","service":"api"'
+          curl -sf http://localhost:4500/health | grep -q '"status":"ok","service":"ingest"'
+          curl -sf http://localhost:3600/status | grep -q 'Every service is up'
+          curl -sf http://localhost:3600/sign-in | grep -q 'Create an account'
+          # The seed's files reach the worker through the shared volume: every
+          # seeded document ends READY (a chunk count only ingest can write).
+          for _ in $(seq 1 60); do
+            ready=$(docker exec rag-postgres psql -U rag -d rag -tAc \
+              "select count(*) from documents where status = 'READY'")
+            total=$(docker exec rag-postgres psql -U rag -d rag -tAc 'select count(*) from documents')
+            echo "documents READY: $ready / $total"
+            [ "$total" -gt 0 ] && [ "$ready" = "$total" ] && exit 0
+            sleep 2
+          done
+          exit 1
+      - name: Compose logs
+        if: failure()
+        run: |
+          docker compose -f infra/docker-compose.yml --profile app ps -a
+          docker compose -f infra/docker-compose.yml --profile app logs --no-color --tail 200
+          cat /tmp/fake-ollama.log

@@ -869,9 +869,13 @@ a.ticket-head:hover .ticket-title {
   align-items: flex-start;
   min-inline-size: 1.5rem;
   block-size: 1.5rem;
-  /* The box is the 24 px target; the margins keep it from pushing the words apart. */
+  /*
+   * The box is the 24 px target; the margins keep it from pushing the words
+   * apart, and take back all but a hair of the padding around the centred
+   * digit, so it sits against its word ("2028¹", layout.spec.ts).
+   */
   margin-block: -0.5rem;
-  margin-inline: -0.3125rem -0.4375rem;
+  margin-inline: -0.5rem;
   vertical-align: 0.5em;
   font-family: var(--font-mono-stack);
   font-size: 0.75rem;

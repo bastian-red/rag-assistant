@@ -36,8 +36,21 @@ mkdir -p "$UPLOAD_DIR"
 echo "evals: build"
 pnpm exec turbo run build --filter=@rag/evals... --output-logs=errors-only >/dev/null
 
-node scripts/check-models.mjs || {
-  echo "evals: the model server in .env is not ready (above). ./scripts/ollama-setup.sh starts it." >&2
+# A run whose phases never chat (retrieval, sweep) needs only the embedding
+# model; the nightly workflow pulls nothing else.
+phases="retrieval,answers,judge"
+args=("$@")
+for i in "${!args[@]}"; do
+  case "${args[$i]}" in
+    --phases=*) phases="${args[$i]#--phases=}" ;;
+    --phases) phases="${args[$((i + 1))]:-}" ;;
+  esac
+done
+check=()
+[[ ",${phases}," == *",answers,"* || ",${phases}," == *",judge,"* ]] || check=(--embed-only)
+
+node scripts/check-models.mjs "${check[@]}" || {
+  echo "evals: the model server in .env is not ready (above). ./scripts/ollama-setup.sh ${check[*]} starts it." >&2
   exit 1
 }
 

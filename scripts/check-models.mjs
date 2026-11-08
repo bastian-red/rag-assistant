@@ -7,7 +7,9 @@
  * sentence with the command that fixes it, not a failed question later. It
  * asks through the built `@rag/llm` client, the same code `/health` uses.
  *
- *   node scripts/check-models.mjs   (OLLAMA_URL, CHAT_MODEL, EMBED_MODEL)
+ *   node scripts/check-models.mjs                (OLLAMA_URL, CHAT_MODEL, EMBED_MODEL)
+ *   node scripts/check-models.mjs --embed-only   the embedding model alone (a
+ *                                                retrieval-only eval never chats)
  *
  * 0 = ready. 1 = unreachable, a model missing or unfit, with the fix. 2 = misconfigured.
  */
@@ -28,13 +30,23 @@ if (!url || !chat || !embed) {
   process.exit(2);
 }
 
+const embedOnly = process.argv.includes('--embed-only');
+
 try {
-  const status = await createOllama({ baseUrl: url, timeoutMs: 3000 }).checkModels({ chat, embed });
+  const ollama = createOllama({ baseUrl: url, timeoutMs: 3000 });
+  const status = embedOnly
+    ? {
+        chat: { model: chat, present: true, problem: null },
+        embed: await ollama.checkModel('embed', embed),
+      }
+    : await ollama.checkModels({ chat, embed });
   const missing = missingModels(status);
   if (missing.length > 0) {
     console.error(`The model server at ${url} does not have: ${missing.join(', ')}. Pull them:`);
     for (const model of missing) console.error(`  ollama pull ${model}`);
-    console.error('or run ./scripts/ollama-setup.sh, which installs Ollama and pulls both.');
+    console.error(
+      `or run ./scripts/ollama-setup.sh${embedOnly ? ' --embed-only' : ''}, which installs Ollama and pulls ${embedOnly ? 'it' : 'both'}.`,
+    );
     process.exit(1);
   }
   const problems = modelProblems(status);
@@ -44,7 +56,11 @@ try {
     console.error('Set CHAT_MODEL / EMBED_MODEL in .env (see .env.example) and pull it.');
     process.exit(1);
   }
-  console.log(`models: ${chat} and ${embed} are ready at ${url}`);
+  console.log(
+    embedOnly
+      ? `models: ${embed} is ready at ${url}`
+      : `models: ${chat} and ${embed} are ready at ${url}`,
+  );
 } catch (error) {
   console.error(`The model server is not reachable at ${url} (${error.message}). Start it:`);
   console.error('  ollama serve        (installed by ./scripts/ollama-setup.sh)');

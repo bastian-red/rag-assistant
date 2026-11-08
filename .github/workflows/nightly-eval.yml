@@ -1,0 +1,89 @@
+name: Nightly eval (retrieval)
+
+# The retrieval half of the eval lane, every night, against the REAL embedding
+# model (qwen3-embedding:0.6b in a pinned Ollama) on the pinned 64-question
+# corpus: ingest outcomes match the manifest, recall@6 >= 0.90, MRR >= 0.70,
+# and hybrid beats vector-only and text-only. Any threshold fails the run.
+#
+# Why retrieval only: the full lane (answers + judge with qwen3:4b-instruct)
+# took 2.8 h on the reference laptop's iGPU. A GitHub runner has no GPU, and
+# CPU-only prefill measured about 4.7x slower there, which puts the full lane
+# past the 6 h job limit. Answers and the judge stay the local before-ship
+# lane (`pnpm evals`, README "Evals"), whose reports are committed.
+#
+# The report is compared with the last committed baseline and published as
+# the job summary and an artifact. Nothing is committed back.
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-eval
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATABASE_URL: postgresql://rag:rag@localhost:5445/rag?schema=public
+  OLLAMA_URL: http://localhost:11434
+  CHAT_MODEL: qwen3:4b-instruct
+  EMBED_MODEL: qwen3-embedding:0.6b
+  OLLAMA_IGPU_ENABLE: '0'
+
+jobs:
+  retrieval:
+    name: Retrieval eval on the real embedding model
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg17
+        env:
+          POSTGRES_USER: rag
+          POSTGRES_PASSWORD: rag
+          POSTGRES_DB: rag
+        ports: ['5445:5432']
+        options: >-
+          --health-cmd "pg_isready -U rag -d rag"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      # The pinned Ollama release and the embedding model, cached by both names
+      # (the script checks the archive's SHA-256 before installing it).
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/ollama
+            ~/.ollama/models
+          key: ollama-0.40.12-${{ env.EMBED_MODEL }}
+      - run: ./scripts/ollama-setup.sh --embed-only
+      - name: Evaluate retrieval
+        run: |
+          ./scripts/evals.sh --phases retrieval --label nightly \
+            --baseline evals/reports/2026-11-08-judge-long.json
+      - name: Report
+        if: always()
+        run: |
+          shopt -s nullglob
+          for f in evals/reports/*-nightly.md; do cat "$f" >> "$GITHUB_STEP_SUMMARY"; done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-eval
+          path: |
+            evals/reports/*-nightly.*
+            /tmp/rag-eval/progress.log
+            ~/.ollama/serve.log
+          if-no-files-found: ignore

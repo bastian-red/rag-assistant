@@ -5,6 +5,8 @@
 #
 #   ./scripts/ollama-setup.sh            install if missing, serve if not running, pull models
 #   ./scripts/ollama-setup.sh --check    report only; exit 1 if anything is missing
+#   ./scripts/ollama-setup.sh --embed-only   only the embedding model (the nightly
+#                                            retrieval eval needs no 2.5 GB chat model)
 #
 # Where things go:
 #
@@ -47,7 +49,14 @@ declare -A SHA256=(
 )
 
 CHECK_ONLY=0
-[[ "${1:-}" == "--check" ]] && CHECK_ONLY=1
+EMBED_ONLY=0
+for arg in "$@"; do
+  case "$arg" in
+    --check) CHECK_ONLY=1 ;;
+    --embed-only) EMBED_ONLY=1 ;;
+    *) printf 'ollama-setup: unknown option %s (--check, --embed-only)\n' "$arg" >&2; exit 2 ;;
+  esac
+done
 
 PREFIX="${HOME}/.local/ollama/${VERSION}"
 LINK="${HOME}/.local/bin/ollama"
@@ -55,6 +64,8 @@ LOG="${HOME}/.ollama/serve.log"
 URL="${OLLAMA_URL:-http://localhost:11434}"
 CHAT="${CHAT_MODEL:?CHAT_MODEL is not set (.env)}"
 EMBED="${EMBED_MODEL:?EMBED_MODEL is not set (.env)}"
+MODELS=("$CHAT" "$EMBED")
+[[ $EMBED_ONLY -eq 1 ]] && MODELS=("$EMBED")
 
 say() { printf '==> %s\n' "$*"; }
 fail() { printf 'ollama-setup: %s\n' "$*" >&2; exit 1; }
@@ -132,7 +143,7 @@ reachable && say "Server: answering at ${URL}"
 # --- 3. the models --------------------------------------------------------------
 if reachable; then
   pulled="$(curl -sf "${URL%/}/api/tags")"
-  for model in "$CHAT" "$EMBED"; do
+  for model in "${MODELS[@]}"; do
     want="$model"
     [[ "${want##*/}" == *:* ]] || want="${want}:latest"
     if grep -qF "\"name\":\"${want}\"" <<<"$pulled"; then
@@ -151,4 +162,4 @@ if [[ ${#missing[@]} -gt 0 ]]; then
   echo "Run ./scripts/ollama-setup.sh (without --check) to install them." >&2
   exit 1
 fi
-say "Ready: ${CHAT} and ${EMBED} at ${URL}"
+say "Ready: ${MODELS[*]} at ${URL}"

@@ -20,7 +20,14 @@
 export const SESSION_COOKIES = ['authjs.session-token', '__Secure-authjs.session-token'] as const;
 
 /** Exact public paths, and public prefixes (which must end in `/`). */
-const PUBLIC_PATHS = new Set(['/sign-in', '/sign-up', '/status', '/icon.svg', '/favicon.ico']);
+const PUBLIC_PATHS = new Set([
+  '/sign-in',
+  '/sign-up',
+  '/status',
+  '/icon.svg',
+  '/favicon.ico',
+  '/robots.txt',
+]);
 const PUBLIC_PREFIXES = ['/api/auth/', '/_next/'];
 
 export function isPublicPath(pathname: string): boolean {

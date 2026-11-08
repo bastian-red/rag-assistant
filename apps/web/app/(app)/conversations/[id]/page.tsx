@@ -9,7 +9,7 @@ import { turnsFromMessages } from '../../../../lib/chat-state';
 import { requireUser } from '../../../../lib/session';
 import { deleteConversationAction } from '../../../library-actions';
 
-export const metadata = { title: 'Conversation', robots: { index: false } };
+export const metadata = { title: 'Conversation' };
 
 /**
  * A conversation: its stored history rendered on the server, then the live

@@ -39,7 +39,7 @@ import type { AddressInfo } from 'node:net';
 import { chatMessageSchema, normaliseModel, type ChatMessage } from '@rag/shared';
 import { z } from 'zod';
 
-import { scriptedAnswer, streamPieces } from './answer';
+import { resolveCites, scriptedAnswer, streamPieces } from './answer';
 import { hashEmbedding } from './embedding';
 
 /**
@@ -56,7 +56,10 @@ export function fakeDigest(model: string): string {
 
 /** How the fake answers. Every field has a default; a script overrides some. */
 export interface FakeChatScript {
-  /** The whole answer; null derives it from the sources in the prompt. */
+  /**
+   * The whole answer; null derives it from the sources in the prompt. `[S:text]`
+   * cites the source holding `text` (`resolveCites`).
+   */
   readonly answer: string | null;
   /**
    * Reasoning to emit before the answer: in the `thinking` field when the
@@ -359,7 +362,8 @@ export async function startFakeOllama(options: FakeOllamaOptions): Promise<FakeO
     if (isEmbeddingModel(model)) return send(400, { error: `"${model}" does not support chat` });
 
     const plan = script; // a script change mid-stream does not change this answer
-    const answer = plan.answer ?? scriptedAnswer(messages);
+    const answer =
+      plan.answer === null ? scriptedAnswer(messages) : resolveCites(plan.answer, messages);
     const record: FakeChatRecord = {
       model,
       messages,

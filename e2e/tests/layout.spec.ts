@@ -9,7 +9,11 @@
  */
 import type { Page } from '@playwright/test';
 
-/** A new, empty conversation over Alma's whole library; `drop` deletes it again. */
+/**
+ * A new, empty conversation over Alma's whole library; `drop` deletes it
+ * again. Call `drop` in a `finally`: Alma is a seeded person on the dev
+ * database, and a failed check once left her an empty "New conversation".
+ */
 async function openConversation(page: Page) {
   await page.getByRole('button', { name: 'Ask your whole library' }).click();
   await page.waitForURL(/\/conversations\//u);
@@ -64,6 +68,20 @@ test('a collection, a conversation and a passage do not scroll sideways at 390 p
   const box = await page.getByTestId('citation-chip').boundingBox();
   expect(box?.width, 'chip width').toBeGreaterThanOrEqual(24);
   expect(box?.height, 'chip height').toBeGreaterThanOrEqual(24);
+  // ...and its digit sits against the word it cites: the glyph's left edge
+  // within 2 px of the word's last letter, the 24 px box notwithstanding.
+  const gap = await page.getByTestId('citation-chip').evaluate((chip) => {
+    const word = chip.previousSibling;
+    if (word?.nodeType !== Node.TEXT_NODE || !word.textContent) return Number.NaN;
+    const digit = document.createRange();
+    digit.selectNodeContents(chip);
+    const letter = document.createRange();
+    letter.setStart(word, word.textContent.length - 1);
+    letter.setEnd(word, word.textContent.length);
+    return digit.getBoundingClientRect().left - letter.getBoundingClientRect().right;
+  });
+  expect(gap, 'gap between the word and its citation, px').toBeGreaterThanOrEqual(-1);
+  expect(gap, 'gap between the word and its citation, px').toBeLessThanOrEqual(2);
   await page.getByTestId('citation-chip').click();
   await expect(page.getByTestId('quote')).toBeVisible();
   expect(await overflow(page), 'passage').toBeLessThanOrEqual(0);
@@ -98,10 +116,13 @@ test.describe('on a touch screen', () => {
   test('the composer does not name keys a phone does not have (UX-AUDIT #6)', async ({ page }) => {
     await signIn(page, 'alma');
     const drop = await openConversation(page);
-    expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
-    await expect(page.getByText('Enter to ask, Shift+Enter for a new line.')).toBeHidden();
-    await expect(page.getByRole('button', { name: 'Ask', exact: true })).toBeVisible();
-    await drop();
+    try {
+      expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
+      await expect(page.getByText('Enter to ask, Shift+Enter for a new line.')).toBeHidden();
+      await expect(page.getByRole('button', { name: 'Ask', exact: true })).toBeVisible();
+    } finally {
+      await drop();
+    }
   });
 });
 
@@ -119,7 +140,10 @@ test.describe('at desktop width', () => {
     );
     // The keyboard hint is shown where there is a keyboard.
     const drop = await openConversation(page);
-    await expect(page.getByText('Enter to ask, Shift+Enter for a new line.')).toBeVisible();
-    await drop();
+    try {
+      await expect(page.getByText('Enter to ask, Shift+Enter for a new line.')).toBeVisible();
+    } finally {
+      await drop();
+    }
   });
 });

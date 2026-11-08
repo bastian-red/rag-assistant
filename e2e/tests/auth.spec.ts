@@ -75,6 +75,21 @@ test('the status page needs no session', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Status');
 });
 
+test('a private library tells crawlers to stay out, signed out and in', async ({ page }) => {
+  const robots = await page.request.get('/robots.txt', { maxRedirects: 0 });
+  expect(robots.status()).toBe(200);
+  expect(await robots.text()).toBe('User-Agent: *\nDisallow: /\n\n');
+  // Measured: Next renders `robots: { index: false }` as exactly "noindex".
+  // The root layout is the one place that says it: the public status page and
+  // every private page inherit it.
+  for (const path of ['/sign-in', '/status']) {
+    await page.goto(path);
+    await expect(page.locator('meta[name="robots"]'), path).toHaveAttribute('content', 'noindex');
+  }
+  await signIn(page, 'alma');
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex');
+});
+
 test('sign-up makes a private library and signs in; the same address twice is refused', async ({
   page,
 }) => {

@@ -74,6 +74,32 @@ describe('ticketsOf, a live answer', () => {
     });
   });
 
+  it('never sets a quote under the section its passage started in', () => {
+    // The radiators sentence comes from further down a passage that opens
+    // under "Pressure" (seen in the demo): the ticket names its page only.
+    const radiators = source(1, { page: 3, pageEnd: 4, headingPath: ['Boiler', 'Pressure'] });
+    const row = ticketsOf(
+      turn({
+        status: 'done',
+        sources: [radiators, source(2, { headingPath: ['Repairs'] })],
+        citations: [citation(1, { page: 4, quote: 'Bleed the radiators each winter.' })],
+      }),
+    );
+    expect(row?.tickets.map((t) => [t.excerpt, t.where])).toEqual([
+      ['Bleed the radiators each winter.', 'page 4'],
+      ['Opening 2', 'Repairs'],
+    ]);
+  });
+
+  it('does not repeat the title as the section of a passage that opens under it', () => {
+    const row = nearestTickets([
+      source(1, { documentTitle: 'Flat lease', headingPath: ['Flat lease'] }),
+      source(2, { documentTitle: 'Flat lease', headingPath: ['Flat lease'], page: 2 }),
+      source(3, { documentTitle: 'Flat lease', headingPath: ['Flat lease', 'Repairs'] }),
+    ]);
+    expect(row?.tickets.map((t) => t.where)).toEqual([null, 'page 2', 'Repairs']);
+  });
+
   it('keeps "returned" on a stopped or failed answer: it never finished citing', () => {
     for (const status of ['stopped', 'failed'] as const) {
       const row = ticketsOf(turn({ status, sources: [source(1)], citations: [citation(1)] }));

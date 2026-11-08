@@ -13,7 +13,9 @@
  *   rather than pretending to be everything that was found;
  * - a cited ticket links to the passage with the quote's span, so the mark
  *   lands on the quoted words; a deleted document's ticket says so and links
- *   nowhere.
+ *   nowhere;
+ * - a ticket names a section only beside the words it describes: the
+ *   passage's opening, never a quote from further down.
  */
 import type { CitationView, StreamSource } from '@rag/shared';
 
@@ -43,8 +45,13 @@ export interface TicketRow {
 
 const passages = (n: number) => (n === 1 ? '1 passage' : `${String(n)} passages`);
 
-function where(section: string | null, page: string | null): string | null {
-  const parts = [section, page].filter((p): p is string => p !== null && p !== '');
+/**
+ * "Warranty · page 4". A passage that opens under the document's own title
+ * heading names no section: the ticket prints that title just above it.
+ */
+function where(section: string | null, page: string | null, title = ''): string | null {
+  const same = section !== null && section.trim().toLowerCase() === title.trim().toLowerCase();
+  const parts = [same ? null : section, page].filter((p): p is string => p !== null && p !== '');
   return parts.length === 0 ? null : parts.join(' · ');
 }
 
@@ -57,7 +64,18 @@ function fromSource(
   return {
     marker: source.marker,
     title: source.documentTitle,
-    where: where(source.headingPath.at(-1) ?? null, pageWords(source.page, source.pageEnd)),
+    // The section a passage STARTS in describes its opening, not a quote
+    // further down ("Pressure" over a sentence from "Radiators"), and the
+    // browser never holds the passage's whole text to find the quote's own.
+    // So a cited ticket, which shows the quote, says the page only; the
+    // passage page names the quote's section (quoteSection).
+    where: cited
+      ? where(null, pageWords(citation.page))
+      : where(
+          source.headingPath.at(-1) ?? null,
+          pageWords(source.page, source.pageEnd),
+          source.documentTitle,
+        ),
     excerpt: cited ? citation.quote : source.snippet,
     href:
       cited && citation.documentId !== null && citation.chunkId !== null

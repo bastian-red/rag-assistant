@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { SignUpForm } from '../../../components/sign-up-form';
 import { signUpAction } from '../actions';
 
-export const metadata = { title: 'Create an account', robots: { index: false } };
+export const metadata = { title: 'Create an account' };
 
 /** A new, private library: one empty collection to drop the first file into. */
 export default function SignUpPage() {

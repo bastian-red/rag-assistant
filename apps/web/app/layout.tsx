@@ -71,6 +71,9 @@ export const metadata: Metadata = {
   title: { default: 'rag-assistant', template: '%s | rag-assistant' },
   description:
     'Ask questions of your own documents and get answers that cite the exact passage, from an open-weight model on your own machine.',
+  // Every page is a private library or the door to one: nothing here is for a
+  // search engine (robots.ts says the same to crawlers that skip the page).
+  robots: { index: false },
 };
 
 /** The browser chrome matches the canvas in each scheme (`--bg` in globals.css). */

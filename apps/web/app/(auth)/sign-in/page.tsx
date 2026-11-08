@@ -4,7 +4,7 @@ import { AuthForm } from '../../../components/auth-form';
 import { safeNextPath } from '../../../lib/next-path';
 import { signInAction } from '../actions';
 
-export const metadata = { title: 'Sign in', robots: { index: false } };
+export const metadata = { title: 'Sign in' };
 
 /**
  * Sign in to your library. `next` is where a deep link was going; it is

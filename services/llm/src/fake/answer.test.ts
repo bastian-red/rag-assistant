@@ -3,7 +3,7 @@ import { formatSources } from '@rag/shared';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
-import { NOT_FOUND, scriptedAnswer, streamPieces } from './answer';
+import { NOT_FOUND, resolveCites, scriptedAnswer, streamPieces } from './answer';
 
 const ask = (content: string) => [{ role: 'user' as const, content }];
 
@@ -56,5 +56,32 @@ describe('streamPieces', () => {
 
   it('cuts a two-digit marker across pieces, as a tokenizer does', () => {
     expect(streamPieces('Gauge [S12].')).toEqual(['Gau', 'ge', ' [S1', '2].']);
+  });
+});
+
+describe('resolveCites', () => {
+  const prompt = formatSources([
+    { marker: 1, title: 'Lease summary', page: null, text: 'The rent is reviewed every April.' },
+    {
+      marker: 2,
+      title: 'Boiler service record',
+      page: null,
+      text: 'The warranty ends in March 2028.',
+    },
+  ]);
+  const messages = [{ role: 'user' as const, content: `${prompt}\n\nWhen does it end?` }];
+
+  it('cites the source that holds the words, wherever retrieval put it', () => {
+    expect(resolveCites('It ends in March 2028 [S:March 2028].', messages)).toBe(
+      'It ends in March 2028 [S2].',
+    );
+    expect(resolveCites('Rent [S:every April], warranty [S:warranty ends].', messages)).toBe(
+      'Rent [S1], warranty [S2].',
+    );
+  });
+
+  it('leaves a needle no source holds as written, and plain markers alone', () => {
+    expect(resolveCites('Nowhere [S:zebra].', messages)).toBe('Nowhere [S:zebra].');
+    expect(resolveCites('Plain [S1].', messages)).toBe('Plain [S1].');
   });
 });

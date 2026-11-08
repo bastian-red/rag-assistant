@@ -21,7 +21,7 @@ import {
 } from '../../../../../../lib/passage-blocks';
 import { requireUser } from '../../../../../../lib/session';
 
-export const metadata = { title: 'Passage', robots: { index: false } };
+export const metadata = { title: 'Passage' };
 
 /** Draws blocks; the first marked piece carries the test id and is what the page scrolls to. */
 function render(blocks: readonly Block[]): ReactNode[] {

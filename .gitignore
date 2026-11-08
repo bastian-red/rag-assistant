@@ -44,3 +44,6 @@ apps/web/next-env.d.ts
 
 # Local data: uploaded files under pnpm dev.
 .data/
+
+# The demo spec's frames; scripts/demo-gif.sh turns them into assets/demo.gif.
+e2e/demo-shots/

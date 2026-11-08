@@ -9,7 +9,7 @@ import { describeCounts } from '../../../../lib/library';
 import { requireUser } from '../../../../lib/session';
 import { deleteCollectionAction, startConversationAction } from '../../../library-actions';
 
-export const metadata = { title: 'Collection', robots: { index: false } };
+export const metadata = { title: 'Collection' };
 
 /**
  * One collection: its documents with live status, the upload, and "ask this

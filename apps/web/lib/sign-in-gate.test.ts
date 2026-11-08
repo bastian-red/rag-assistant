@@ -26,6 +26,7 @@ describe('the signed-out deep link', () => {
       '/sign-in',
       '/sign-up',
       '/status',
+      '/robots.txt',
       '/api/auth/session',
       '/_next/static/x.js',
     ]) {
@@ -35,6 +36,7 @@ describe('the signed-out deep link', () => {
       '/sign-in-later',
       '/sign-up-now',
       '/statuses',
+      '/robots.txt.bak',
       '/api/authx',
       '/api/documents',
     ]) {
