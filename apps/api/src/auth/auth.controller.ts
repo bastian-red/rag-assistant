@@ -1,14 +1,15 @@
 /**
- * `/auth/sign-in`: the one route on this API a person reaches without a token.
+ * `/auth/sign-in` and `/auth/sign-up`: the two routes on this API a person
+ * reaches without a token.
  *
- * There is no sign-up (see `signInSchema`). It carries `@Budget('auth')`, which opts them into the auth budget on top of
+ * Both carry `@Budget('auth')`, which opts them into the auth budget on top of
  * the general one -- an order of magnitude below it, because this is the
  * credential-stuffing surface. `assertConsistent` refuses to boot if the two
  * numbers are the wrong way round, and `common/throttle.ts` explains why the
  * budget is opted into rather than "selected".
  */
 import { Body, Controller, Get, HttpCode, HttpStatus, Post } from '@nestjs/common';
-import { signInSchema, type SessionUser } from '@rag/shared';
+import { signInSchema, signUpSchema, type SessionUser } from '@rag/shared';
 import type { z } from 'zod';
 
 import { AuthService } from './auth.service';
@@ -32,6 +33,17 @@ export class AuthController {
     @Body(new ZodPipe(signInSchema)) input: z.infer<typeof signInSchema>,
   ): Promise<SessionUser> {
     return this.auth.signIn(input);
+  }
+
+  /** 201 with the new account, which the web app then signs in. */
+  @Public()
+  @Budget('auth')
+  @HttpCode(HttpStatus.CREATED)
+  @Post('sign-up')
+  signUp(
+    @Body(new ZodPipe(signUpSchema)) input: z.infer<typeof signUpSchema>,
+  ): Promise<SessionUser> {
+    return this.auth.signUp(input);
   }
 
   /**

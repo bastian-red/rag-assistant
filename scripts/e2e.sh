@@ -124,6 +124,12 @@ pnpm --filter @rag/db run seed >"$LOG_DIR/seed.log" 2>&1 || {
   exit 1
 }
 
+# Accounts earlier runs made through the sign-up form, and their files.
+pnpm --filter @rag/db exec node ../../scripts/e2e-cleanup.mjs >"$LOG_DIR/cleanup.log" 2>&1 || {
+  tail -20 "$LOG_DIR/cleanup.log" >&2
+  exit 1
+}
+
 echo "==> Starting the fake model server, ingest worker, api, web (logs in ${LOG_DIR})"
 node services/llm/dist/fake/main.js --port "$FAKE_PORT" --models "${CHAT_MODEL},${EMBED_MODEL}" \
   >"$FAKE_LOG" 2>&1 &

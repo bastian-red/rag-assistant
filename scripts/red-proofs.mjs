@@ -26,7 +26,8 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
  * name, file, exact text, its broken replacement, and the suite that must go
- * red: ['unit', package] or ['integration', API test filter, phase] where
+ * red: ['unit', package], ['e2e', spec file, test-title grep] (Chromium,
+ * through scripts/e2e.sh, which rebuilds) or ['integration', API test filter, phase] where
  * phase is one of integration.sh's (db, ingest, retrieval, bench, api);
  * `freshDatabase` for a proof that edits a migration (see databaseUrl).
  */
@@ -52,6 +53,60 @@ const PROOFS = [
     from: "return `ip:${addressHash(secret, request.ip ?? 'unknown')}`;",
     to: "return `ip:${request.ip ?? 'unknown'}`;",
     suite: ['unit'],
+  },
+  {
+    name: 'sign-up creates an account with no collection',
+    file: 'apps/api/src/auth/auth.service.ts',
+    from: '          collections: { create: { name: FIRST_COLLECTION_NAME } },\n',
+    to: '',
+    suite: ['integration', 'auth'],
+  },
+  {
+    name: 'sign-up skips the auth budget',
+    file: 'apps/api/src/auth/auth.controller.ts',
+    from: "  @Budget('auth')\n  @HttpCode(HttpStatus.CREATED)",
+    to: '  @HttpCode(HttpStatus.CREATED)',
+    suite: ['integration', 'auth'],
+  },
+  // --- the web app (step 9) -------------------------------------------------
+  {
+    // Two paths carry Stop from the browser to the API: the request's signal
+    // and the response stream's cancel. Each alone was measured to suffice
+    // (breaking one stays green), so the proof breaks both.
+    name: 'stop never reaches the API',
+    file: 'apps/web/lib/upstream.ts',
+    from: "  else request.signal.addEventListener('abort', () => controller.abort(), { once: true });\n",
+    to: '',
+    also: { from: '    cancel() {\n      abort.abort();\n    },\n', to: '    cancel() {},\n' },
+    suite: ['e2e', 'tests/chat.spec.ts', 'Stop keeps'],
+  },
+  {
+    name: 'viewer prints the passage start page, not the quote page',
+    file: 'apps/web/lib/passage.ts',
+    from: '  for (const start of chunk.pageStarts) if (start.at <= at) page = start.page;\n',
+    to: '',
+    suite: ['e2e', 'tests/chat.spec.ts', 'SPECS #10'],
+  },
+  {
+    name: 'collection page ignores the live ingest feed',
+    file: 'apps/web/components/collection-documents.tsx',
+    from: "    source.addEventListener('ingest', ",
+    to: "    source.addEventListener('ingest-off', ",
+    suite: ['e2e', 'tests/library.spec.ts', 'upload to ready live'],
+  },
+  {
+    name: 'stored chips forget the quote span',
+    file: 'apps/web/lib/chat-state.ts',
+    from: '  const citation = turn.citations.find((c) => c.marker === marker);',
+    to: '  const citation = turn.citations.find(() => false);',
+    suite: ['e2e', 'tests/chat.spec.ts', 'conversation is kept'],
+  },
+  {
+    name: 'route handlers redirected to the sign-in page',
+    file: 'apps/web/lib/sign-in-gate.ts',
+    from: "  return pathname.startsWith('/api/');",
+    to: '  return false;',
+    suite: ['unit', '@rag/web'],
   },
   // --- the model server: reachable is not the same as ready ----------------
   {
@@ -670,12 +725,18 @@ function run(suite, proof) {
   const result =
     lane === 'unit'
       ? spawnSync('pnpm', ['--filter', arg ?? '@rag/api', 'exec', 'vitest', 'run'], options)
-      : spawnSync('./scripts/integration.sh', arg === undefined ? [] : [arg], options);
+      : lane === 'e2e'
+        ? spawnSync(
+            './scripts/e2e.sh',
+            ['--project=chromium', arg, ...(phase === undefined ? [] : ['-g', phase])],
+            options,
+          )
+        : spawnSync('./scripts/integration.sh', arg === undefined ? [] : [arg], options);
   return {
     status: result.status,
     tail: `${result.stdout}${result.stderr}`
       .split('\n')
-      .filter((l) => /×|\bFAIL\b|error TS|db-drift:/u.test(l))
+      .filter((l) => /×|✘|\bFAIL\b|error TS|db-drift:/u.test(l))
       .slice(0, 3),
   };
 }

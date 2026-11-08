@@ -22,11 +22,30 @@ describe('the signed-out deep link', () => {
   });
 
   it('leaves exactly the public pages alone, and not paths that merely start like them', () => {
-    for (const path of ['/sign-in', '/status', '/api/auth/session', '/_next/static/x.js']) {
+    for (const path of [
+      '/sign-in',
+      '/sign-up',
+      '/status',
+      '/api/auth/session',
+      '/_next/static/x.js',
+    ]) {
       expect(isPublicPath(path), path).toBe(true);
     }
-    for (const path of ['/sign-in-later', '/statuses', '/api/authx', '/api/documents']) {
+    for (const path of [
+      '/sign-in-later',
+      '/sign-up-now',
+      '/statuses',
+      '/api/authx',
+      '/api/documents',
+    ]) {
       expect(isPublicPath(path), path).toBe(false);
     }
+  });
+
+  it('never redirects a route handler, which answers 401 itself', () => {
+    expect(signInRedirect('/api/documents', '', [])).toBeNull();
+    expect(signInRedirect('/api/chat/x', '', [])).toBeNull();
+    // A page that only looks like one is still private.
+    expect(signInRedirect('/apis', '', [])).not.toBeNull();
   });
 });

@@ -15,6 +15,11 @@
       "require": "./dist/constants.js",
       "import": "./dist/constants.js"
     },
+    "./sse": {
+      "types": "./dist/sse.d.ts",
+      "require": "./dist/sse.js",
+      "import": "./dist/sse.js"
+    },
     "./server": {
       "types": "./dist/server/index.d.ts",
       "require": "./dist/server/index.js",

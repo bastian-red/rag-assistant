@@ -207,7 +207,9 @@ grep -qF 'data-testid="collections"' <<<"$library" || {
   die "/ lists no collections (web -> service token -> api -> Postgres)."
 }
 for shelf in "${SHELVES[@]}"; do
-  grep -qF "<h3>${shelf}</h3>" <<<"$library" || die "/ does not list the seeded collection '${shelf}'."
+  # Each collection's heading links to its page (step 9).
+  grep -qE "<h3><a href=\"/collections/[a-z0-9]+\">${shelf}</a></h3>" <<<"$library" ||
+    die "/ does not list the seeded collection '${shelf}' with a link to it."
 done
 
 echo "==> Checking /status reads every service through the API"

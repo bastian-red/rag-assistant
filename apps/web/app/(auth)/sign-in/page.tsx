@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { AuthForm } from '../../../components/auth-form';
 import { safeNextPath } from '../../../lib/next-path';
 import { signInAction } from '../actions';
@@ -21,6 +23,9 @@ export default async function SignInPage({
       <div className="panel">
         <AuthForm next={next} action={signInAction} />
       </div>
+      <p>
+        New here? <Link href="/sign-up">Create an account</Link>
+      </p>
       <p className="muted">
         Two demo accounts, each with its own private library:{' '}
         <code translate="no">alma@rag.test</code> and <code translate="no">bruno@rag.test</code>.

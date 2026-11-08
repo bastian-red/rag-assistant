@@ -1,10 +1,10 @@
 import { z } from 'zod';
 
-import { emailSchema, idSchema, nameSchema } from './primitives';
+import { emailSchema, idSchema, nameSchema, passwordSchema } from './primitives';
 
 /**
- * Sign in with an account that exists. Accounts come from the seed today;
- * self-service sign-up is part of the library step (see docs/PLAN.md).
+ * Sign in with an account that exists. The password is only bounded, not held
+ * to the sign-up rule, so a rule raised later cannot lock out an older account.
  */
 export const signInSchema = z.object({
   email: emailSchema,
@@ -30,5 +30,20 @@ export const sessionUserSchema = z.object({
   name: nameSchema,
 });
 
+/**
+ * Create an account. The password rule is length only (`passwordSchema`).
+ * The new account starts with one empty collection, so the library page has
+ * somewhere to drop the first file.
+ */
+export const signUpSchema = z.object({
+  email: emailSchema,
+  name: nameSchema,
+  password: passwordSchema,
+});
+
+/** The collection every new account starts with. */
+export const FIRST_COLLECTION_NAME = 'My documents';
+
+export type SignUpInput = z.infer<typeof signUpSchema>;
 export type SignInInput = z.infer<typeof signInSchema>;
 export type SessionUser = z.infer<typeof sessionUserSchema>;

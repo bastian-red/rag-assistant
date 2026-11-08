@@ -10,6 +10,8 @@ import { join } from 'node:path';
 
 import { expect, test as base, type Page } from '@playwright/test';
 
+import { boilerPdf } from './pdf';
+
 const SEED = readFileSync(join(__dirname, '..', 'packages', 'db', 'prisma', 'seed.mts'), 'utf8');
 
 function seedConst(name: string): string {
@@ -67,6 +69,70 @@ export async function signOut(page: Page) {
   await page.getByRole('button', { name: 'Sign out' }).click();
   await page.waitForURL(/\/sign-in/u);
   await page.waitForLoadState('load');
+}
+
+/**
+ * A fresh account through the sign-up form, signed in on its new (empty)
+ * library. Specs that upload or ask use one each, so no spec's documents can
+ * change another's answers. `scripts/e2e.sh` removes these accounts before
+ * the next run (their emails start `e2e-`).
+ */
+export async function signUp(page: Page, label = 'reader') {
+  const email = `e2e-${label}-${String(Date.now())}-${String(Math.floor(Math.random() * 1e6))}@rag.test`;
+  const password = 'e2e-password-long-enough';
+  await page.goto('/sign-up');
+  await page.getByLabel('Name').fill(`E2E ${label}`);
+  await page.getByLabel('Email').fill(email);
+  await page.getByLabel('Password').fill(password);
+  await page.getByRole('button', { name: 'Create account' }).click();
+  await page.waitForURL((url) => url.pathname === '/');
+  await page.waitForLoadState('load');
+  return { email, password, name: `E2E ${label}` };
+}
+
+/** A reader with the boiler PDF READY, on a new conversation over its collection. */
+export async function readerWithManual(page: Page, label: string) {
+  await signUp(page, label);
+  await page.getByTestId('collection').getByRole('link', { name: 'My documents' }).click();
+  await page
+    .getByLabel('Choose files, or drop them here')
+    .setInputFiles({ name: 'boiler.pdf', mimeType: 'application/pdf', buffer: boilerPdf() });
+  await expect(page.getByTestId('document-status')).toHaveText('✓ Ready to ask about', {
+    timeout: 30_000,
+  });
+  await page.getByRole('button', { name: 'Ask this collection' }).click();
+  await page.waitForURL(/\/conversations\//u);
+  await expect(page.getByTestId('no-turns')).toBeVisible();
+}
+
+/** Ask in the open conversation. */
+export async function ask(page: Page, question: string) {
+  await page.getByLabel('Your question').fill(question);
+  await page.getByRole('button', { name: 'Ask', exact: true }).click();
+}
+
+/** How the fake model answers the next questions (`PUT /__fake/chat`); `null` resets it. */
+export async function scriptChat(script: Record<string, unknown> | null) {
+  const response = await fetch(`${FAKE_OLLAMA_URL}/__fake/chat`, {
+    method: script === null ? 'DELETE' : 'PUT',
+    ...(script === null
+      ? {}
+      : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(script) }),
+  });
+  if (!response.ok)
+    throw new Error(`the fake model refused the script: ${String(response.status)}`);
+}
+
+/** The fake model's record of every chat, newest last. */
+export async function fakeChats(): Promise<
+  { aborted: boolean; completed: boolean; piecesSent: number }[]
+> {
+  const response = await fetch(`${FAKE_OLLAMA_URL}/__fake/log`);
+  return (
+    (await response.json()) as {
+      chats: { aborted: boolean; completed: boolean; piecesSent: number }[];
+    }
+  ).chats;
 }
 
 /**

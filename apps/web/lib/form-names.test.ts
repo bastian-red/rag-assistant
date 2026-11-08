@@ -23,6 +23,9 @@ const CLOBBERING = [
   'target',
   'encoding',
   'requestSubmit',
+  // form.name and form.id are the form's own; a control named so hides them.
+  'name',
+  'id',
 ];
 
 function walk(directory: string): string[] {

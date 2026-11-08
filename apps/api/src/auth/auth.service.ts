@@ -7,7 +7,13 @@
  * why neither this service nor the guard touches a session table.
  */
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { DomainError, type SessionUser } from '@rag/shared';
+import { USER_EMAIL_UNIQUE, violatedUniqueIndex } from '@rag/db';
+import {
+  DomainError,
+  FIRST_COLLECTION_NAME,
+  type SessionUser,
+  type SignUpInput,
+} from '@rag/shared';
 import { hashPassword, verifyPassword } from '@rag/shared/server';
 
 import { PrismaService } from '../infra/prisma.service';
@@ -50,6 +56,35 @@ export class AuthService {
       throw new DomainError('INVALID', 'That email address and password do not match.');
     }
     return { id: row.id, email: row.email, name: row.name };
+  }
+
+  /**
+   * Create an account and its first, empty collection in one transaction, so
+   * no account exists without somewhere to put a file.
+   *
+   * A taken address is a 409 that says so. Sign-up cannot hide whether an
+   * address is registered (the only alternative is an email round trip this
+   * app has no mail service for), so the oracle is bounded instead: the route
+   * shares the sign-in budget, five a minute per address.
+   */
+  async signUp(input: SignUpInput): Promise<SessionUser> {
+    const passwordHash = hashPassword(input.password);
+    try {
+      return await this.prisma.client.user.create({
+        data: {
+          email: input.email,
+          name: input.name,
+          passwordHash,
+          collections: { create: { name: FIRST_COLLECTION_NAME } },
+        },
+        select: { id: true, email: true, name: true },
+      });
+    } catch (error) {
+      if (violatedUniqueIndex(error, USER_EMAIL_UNIQUE)) {
+        throw new DomainError('CONFLICT', 'An account with that email address already exists.');
+      }
+      throw error;
+    }
   }
 
   /** The signed-in user as stored now, or 401 if the account no longer exists. */

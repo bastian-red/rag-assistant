@@ -8,7 +8,9 @@
  * an auth budget that capped every route. So this proves the sign-in budget
  * does not limit `/health`, `/status`, or a signed-in call from the same address.
  */
-import { sessionUserSchema } from '@rag/shared';
+import { randomUUID } from 'node:crypto';
+
+import { FIRST_COLLECTION_NAME, sessionUserSchema } from '@rag/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { boot, call, newUser, randomAddress, routes, type Harness } from './support';
@@ -69,6 +71,76 @@ describe('POST /auth/sign-in', () => {
   });
 });
 
+describe('POST /auth/sign-up', () => {
+  const made: string[] = [];
+  afterAll(async () => {
+    await h.db.user.deleteMany({ where: { email: { in: made } } });
+  });
+  const fresh = (label: string) => {
+    const email = `${label}-${randomUUID().slice(0, 8)}@rag.test`;
+    made.push(email);
+    return email;
+  };
+
+  it('creates the account with one empty collection, and the password then signs in', async () => {
+    const email = fresh('newcomer');
+    const r = await call(h, 'POST', '/auth/sign-up', {
+      body: { email: email.toUpperCase(), name: '  Nadia  ', password: 'a-long-enough-pass' },
+    });
+    expect(r.status).toBe(201);
+    const user = sessionUserSchema.parse(r.body);
+    expect(user).toMatchObject({ email, name: 'Nadia' });
+
+    const collections = await call<{
+      collections: { name: string; documents: { total: number } }[];
+    }>(h, 'GET', '/collections', { user });
+    expect(collections.body.collections).toEqual([
+      expect.objectContaining({
+        name: FIRST_COLLECTION_NAME,
+        documents: expect.objectContaining({ total: 0 }),
+      }),
+    ]);
+
+    const signIn = await call(h, 'POST', '/auth/sign-in', {
+      body: { email, password: 'a-long-enough-pass' },
+    });
+    expect(signIn.status).toBe(200);
+    // Stored as a scrypt hash, never the password.
+    const row = await h.db.user.findUniqueOrThrow({ where: { email } });
+    expect(row.passwordHash).not.toContain('a-long-enough-pass');
+  });
+
+  it('refuses a taken address with a 409 and creates nothing', async () => {
+    const email = fresh('taken');
+    const body = { email, name: 'First', password: 'a-long-enough-pass' };
+    expect((await call(h, 'POST', '/auth/sign-up', { body })).status).toBe(201);
+    const again = await call(h, 'POST', '/auth/sign-up', { body: { ...body, name: 'Second' } });
+    expect(again.status).toBe(409);
+    expect(again.body).toMatchObject({ code: 'CONFLICT' });
+    expect(await h.db.user.count({ where: { email } })).toBe(1);
+  });
+
+  it('holds a password to twelve characters, and never echoes it', async () => {
+    const r = await call(h, 'POST', '/auth/sign-up', {
+      body: { email: fresh('short'), name: 'Short', password: 'elevenchars' },
+    });
+    expect(r.status).toBe(400);
+    expect(r.body).toMatchObject({ code: 'INVALID', fields: ['password'] });
+    expect(r.text).not.toContain('elevenchars');
+  });
+
+  it('shares the auth budget: the sixth attempt a minute from one address is a 429', async () => {
+    const address = randomAddress();
+    const attempt = () =>
+      call(h, 'POST', '/auth/sign-up', {
+        address,
+        body: { email: 'not-an-email', name: 'x', password: 'a-long-enough-pass' },
+      });
+    for (let i = 0; i < AUTH_BUDGET; i += 1) expect((await attempt()).status).toBe(400);
+    expect((await attempt()).status).toBe(429);
+  });
+});
+
 describe('the session guard is default-closed', () => {
   it('refuses a route that is not @Public() without a token', async () => {
     const r = await call(h, 'GET', '/auth/me', { user: null });
@@ -104,6 +176,7 @@ describe('the session guard is default-closed', () => {
       'GET /health',
       'GET /status',
       'POST /auth/sign-in',
+      'POST /auth/sign-up',
       'POST /chat/:conversationId/messages',
       'POST /collections',
       'POST /conversations',

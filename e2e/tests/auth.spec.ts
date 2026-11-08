@@ -1,4 +1,4 @@
-import { expect, formError, PEOPLE, signIn, signOut, test, type Person } from '../fixtures';
+import { expect, formError, PEOPLE, signIn, signOut, signUp, test, type Person } from '../fixtures';
 
 for (const who of Object.keys(PEOPLE) as Person[]) {
   test(`${who} lands in their own library, named as the API holds them`, async ({ page }) => {
@@ -73,4 +73,35 @@ test('the status page needs no session', async ({ page }) => {
   await page.goto('/status');
   await expect(page).toHaveURL(/\/status$/u);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Status');
+});
+
+test('sign-up makes a private library and signs in; the same address twice is refused', async ({
+  page,
+}) => {
+  await page.goto('/sign-in');
+  await page.getByRole('link', { name: 'Create an account' }).click();
+  await expect(page).toHaveURL(/\/sign-up$/u);
+  const reader = await signUp(page, 'newcomer');
+  await expect(page.getByTestId('who')).toContainText(reader.name);
+  await expect(page.getByTestId('who')).toContainText(reader.email);
+  await expect(page.getByTestId('collection')).toHaveCount(1);
+
+  await signOut(page);
+  await page.goto('/sign-up');
+  await page.getByLabel('Name').fill('Someone else');
+  await page.getByLabel('Email').fill(reader.email);
+  await page.getByLabel('Password').fill('another-long-password');
+  await page.getByRole('button', { name: 'Create account' }).click();
+  await expect(formError(page)).toHaveText(/An account with that email address already exists\./u);
+});
+
+test('a short password is refused before an account exists', async ({ page }) => {
+  await page.goto('/sign-up');
+  await page.getByLabel('Name').fill('Shorty');
+  await page.getByLabel('Email').fill(`e2e-short-${String(Date.now())}@rag.test`);
+  // Past the browser's own minlength check, to reach the server's rule.
+  await page.getByLabel('Password').evaluate((input) => input.removeAttribute('minlength'));
+  await page.getByLabel('Password').fill('elevenchars');
+  await page.getByRole('button', { name: 'Create account' }).click();
+  await expect(formError(page)).toHaveText(/at least 12 characters/u);
 });
