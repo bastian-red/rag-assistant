@@ -254,6 +254,20 @@ function pack(text: string, units: readonly Piece[], options: ChunkOptions): Pie
         flush(false);
       }
     }
+    // A unit that fits a chunk but not this one starts the next chunk, and
+    // that flush can carry trailing headings forward. Flush before deciding
+    // between whole and cut, so the heading test below sees what the unit
+    // will actually sit beside (it once saw the old chunk, went in whole,
+    // and makeRoom then left the moved heading as a chunk by itself).
+    if (
+      unit.kind !== 'heading' &&
+      unit.tokens <= options.targetTokens &&
+      unit.tokens > room() &&
+      current.length > carried &&
+      !onlyHeadings()
+    ) {
+      flush(true);
+    }
     // A unit that fits a chunk goes in whole, unless it would leave a heading
     // alone: a chunk of nothing but a heading retrieves nothing, so the text
     // beside it is cut to fit instead.

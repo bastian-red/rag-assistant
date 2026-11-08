@@ -266,6 +266,13 @@ const PROOFS = [
     suite: ['unit', '@rag/chunker'],
   },
   {
+    name: 'a flushed heading is left alone beside text that would fit cut',
+    file: 'packages/chunker/src/chunk.ts',
+    from: '      !onlyHeadings()\n    ) {\n      flush(true);',
+    to: '      false\n    ) {\n      flush(true);',
+    suite: ['unit', '@rag/chunker'],
+  },
+  {
     name: 'astral-plane check made Unicode-aware, so it never matches',
     file: 'packages/chunker/src/offsets.ts',
     from: '  if (!/[\\' + 'uD800-\\' + 'uDBFF]/.test(text)) return (utf16) => utf16;',

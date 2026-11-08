@@ -322,6 +322,19 @@ describe('chunkDocument: packing', () => {
     );
   });
 
+  it('cuts the text rather than leave a heading alone when the flush moved it forward', () => {
+    // fast-check's counterexample from CI (seed -1105645181), as shrunk: the
+    // sentence fits a chunk whole but not beside the heading, and the heading
+    // only became "alone" when the flush before the sentence carried it forward.
+    const raw =
+      '```\n```\n\n# 100 café 10000\n\nNaïve Größe 1.5 F22 aaaaaaaa aaaaaaaaa F22 e.g. boiler Größe. A.\n\n';
+    const doc = chunkDocument({ format: 'markdown', text: raw }, SMALL);
+    const heading = doc.chunks.find((c) => c.text.includes('# 100 café 10000'))!;
+    expect(heading.text).not.toBe('# 100 café 10000');
+    expect(heading.text.startsWith('# 100 café 10000\n\nNaïve Größe')).toBe(true);
+    expect(heading.tokens).toBeLessThanOrEqual(SMALL.maxTokens);
+  });
+
   it('moves a heading forward when the text after it starts a new chunk', () => {
     // Too little text to break before the heading (under minTokens), and the
     // sentence after it does not fit: the heading must go with the sentence.
